@@ -17,8 +17,6 @@ Brick Breaker drops temporary wide-paddle, slow-ball, and fireball boosts from b
 
 Neon Snake accepts only turns that will not reverse into its body. Fruit chains build a multiplier, golden fruit expires, and a rechargeable boost trades fuel for speed. Rooftop Runner buffers early jump presses, mixes jump and slide hazards, and lets coin streaks charge a dash that smashes through an obstacle. Magnet and shield pickups change how the next section is played. Star Patrol escalates formations by wave and gives recovery tools through temporary shield and rapid-fire pickups.
 
-Penguin Launch is a long local career built from repeatable flights. The penguin accelerates down a physical ramp, then pitch control trades speed for lift or a faster dive. Rockets provide a timed thrust choice. Level, fast landings bounce automatically; X adds a stronger bounce when pressed just before touchdown. Collectible lines, sparse obstacles, and changing wind add route choices. Flights earn fish for permanent upgrades; new regions and ramps open as personal records grow. Persist career progress on the device, but keep each run easy to retry.
-
 Games are for fun and should work without an account. Do not use forced ads, paid power, or pressure loops to manufacture repeat play. Keep ads outside active play.
 
 ## Review questions

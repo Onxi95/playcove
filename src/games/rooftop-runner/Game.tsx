@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
+import { useGameSession } from '../kit/use-game-session.ts'
+import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { makeSection, runnerSpeed } from './mechanics.ts'
+import type { RunnerCoin, RunnerObstacle } from './mechanics.ts'
 
-type Obstacle = { x: number; kind: 'crate' | 'sign' }
-type Coin = { x: number; y: number; phase: number }
+type Obstacle = RunnerObstacle
+type Coin = RunnerCoin
 type Pickup = { x: number; y: number; kind: 'magnet' | 'shield' }
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string }
-type Scene = { playerY: number; playerVY: number; grounded: boolean; jumpBuffer: number; obstacles: Obstacle[]; coins: Coin[]; pickups: Pickup[]; particles: Particle[]; elapsed: number; distance: number; coinsCollected: number; bonusScore: number; spawnTimer: number; coinTimer: number; pickupTimer: number; score: number; flash: number; dashFuel: number; dashTimer: number; shieldCharges: number; magnetTimer: number; coinStreak: number; streakTimer: number }
+type Scene = { section: number; message: string; messageTimer: number; playerY: number; playerVY: number; grounded: boolean; jumpBuffer: number; obstacles: Obstacle[]; coins: Coin[]; pickups: Pickup[]; particles: Particle[]; elapsed: number; distance: number; coinsCollected: number; bonusScore: number; spawnTimer: number; coinTimer: number; pickupTimer: number; score: number; flash: number; dashFuel: number; dashTimer: number; shieldCharges: number; magnetTimer: number; coinStreak: number; streakTimer: number }
 type ScoreEntry = { name: string; score: number }
 
 const WIDTH = 800
@@ -19,7 +23,7 @@ const SCORES_KEY = 'playcove.rooftop-runner.scores'
 const NAME_KEY = 'playcove.rooftop-runner.nickname'
 
 function createScene(): Scene {
-  return { playerY: GROUND - PLAYER_HEIGHT, playerVY: 0, grounded: true, jumpBuffer: 0, obstacles: [], coins: [], pickups: [], particles: [], elapsed: 0, distance: 0, coinsCollected: 0, bonusScore: 0, spawnTimer: 0.9, coinTimer: 1.4, pickupTimer: 6, score: 0, flash: 0, dashFuel: 0, dashTimer: 0, shieldCharges: 0, magnetTimer: 0, coinStreak: 0, streakTimer: 0 }
+  return { section: 0, message: '', messageTimer: 0, playerY: GROUND - PLAYER_HEIGHT, playerVY: 0, grounded: true, jumpBuffer: 0, obstacles: [], coins: [], pickups: [], particles: [], elapsed: 0, distance: 0, coinsCollected: 0, bonusScore: 0, spawnTimer: 0.9, coinTimer: 1.4, pickupTimer: 6, score: 0, flash: 0, dashFuel: 50, dashTimer: 0, shieldCharges: 0, magnetTimer: 0, coinStreak: 0, streakTimer: 0 }
 }
 
 function readRecords() {
@@ -44,7 +48,6 @@ function addBurst(scene: Scene, x: number, y: number, color: string) {
 
 function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: number, active: boolean, sliding: boolean) {
   const phase = scene.elapsed * 0.08
-  const speed = 310 + Math.min(260, scene.elapsed * 7)
   context.clearRect(0, 0, WIDTH, HEIGHT)
   const sky = context.createLinearGradient(0, 0, 0, GROUND)
   sky.addColorStop(0, '#f8a87a')
@@ -70,7 +73,7 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   context.fillRect(0, GROUND, WIDTH, HEIGHT - GROUND)
   context.fillStyle = '#f8d36f'
   context.fillRect(0, GROUND, WIDTH, 4)
-  const stripeOffset = (scene.elapsed * speed * 0.7) % 76
+  const stripeOffset = -(scene.distance * 20) % 76
   context.fillStyle = 'rgba(255,255,255,.68)'
   for (let x = -76 + stripeOffset; x < WIDTH; x += 76) context.fillRect(x, GROUND + 42, 42, 4)
 
@@ -123,12 +126,16 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
       context.fillStyle = '#ffe5b0'
       context.fillRect(obstacle.x + 8, GROUND - 70, 42, 4)
       context.fillRect(obstacle.x + 12, GROUND - 61, 34, 3)
-      context.fillStyle = '#29394d'
-      context.fillRect(obstacle.x + 4, GROUND - 48, 7, 48)
-      context.fillRect(obstacle.x + 47, GROUND - 48, 7, 48)
+      context.fillStyle = 'rgba(41,57,77,.35)'
+      context.fillRect(obstacle.x + 8, 0, 2, GROUND - 78)
+      context.fillRect(obstacle.x + 48, 0, 2, GROUND - 78)
     }
   }
 
+  context.fillStyle = 'rgba(20,30,45,.22)'
+  context.beginPath()
+  context.ellipse(PLAYER_X, GROUND + 4, 22, 5, 0, 0, Math.PI * 2)
+  context.fill()
   const isSliding = active && scene.grounded && sliding
   const height = isSliding ? 29 : PLAYER_HEIGHT
   const playerY = GROUND - (scene.grounded ? height : PLAYER_HEIGHT) + (scene.grounded ? 0 : scene.playerY - (GROUND - PLAYER_HEIGHT))
@@ -148,8 +155,8 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   context.fill()
   context.fillStyle = '#26364c'
   context.beginPath()
-  context.roundRect(PLAYER_X - 20, GROUND - 8, 22, 8, 4)
-  context.roundRect(PLAYER_X + 2, GROUND - 8, 22, 8, 4)
+  context.roundRect(PLAYER_X - 19 - run, playerY + height - 7, 20, 8, 4)
+  context.roundRect(PLAYER_X + run, playerY + height - 7, 20, 8, 4)
   context.fill()
   if (scene.dashTimer > 0) context.restore()
 
@@ -161,31 +168,41 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
     context.fill()
   }
   context.globalAlpha = 1
+  if (scene.messageTimer > 0) {
+    context.fillStyle = '#fff3bb'
+    context.font = '900 22px system-ui, sans-serif'
+    context.textAlign = 'center'
+    context.fillText(scene.message, WIDTH / 2, 54)
+  }
 }
 
 export function Game({ locale }: GameProps) {
   const copy = locale === 'pl' ? {
     label: 'ARCADE · BIEG BEZ KOŃCA', title: 'Skacz, ślizgaj się, pędź.', score: 'WYNIK', best: 'REKORD', coins: 'MONETY', streak: 'SERIA', dash: 'DOPALACZ', history: 'NAJLEPSZE WYNIKI', pause: 'Pauza', nickname: 'PSEUDONIM', save: 'Zapisz wynik', empty: 'Zagraj i zapisz pierwszy wynik.', local: 'ZAPISANO NA TYM URZĄDZENIU',
-    ready: 'Gotowy do biegu?', readyText: 'Skacz nad skrzyniami, ślizgaj się pod znakami i łap serie monet. Shift zużywa 30% paska, by przebić się przez przeszkody. Zbieraj ulepszenia.', over: 'Koniec biegu', paused: 'Bieg wstrzymany', magnet: 'MAGNES', shield: 'TARCZA',
+    ready: 'Gotowy do biegu?', readyText: 'Przytrzymaj skok, by skoczyć wysoko; dotknij, by podskoczyć. Monety prowadzą nad skrzyniami i pod znakami. Shift zużywa 50% dopalacza.', over: 'Koniec biegu', paused: 'Bieg wstrzymany', magnet: 'MAGNES', shield: 'TARCZA',
     start: 'Start', again: 'Jeszcze raz', resume: 'Wznów', jump: 'SKOK', slide: 'ŚLIZG',
   } : {
     label: 'ARCADE · ENDLESS RUN', title: 'Jump, slide, hit the boost.', score: 'SCORE', best: 'BEST', coins: 'COINS', streak: 'STREAK', dash: 'BOOST', history: 'HIGH SCORES', pause: 'Pause', nickname: 'NICKNAME', save: 'Save score', empty: 'Play a round and save your first score.', local: 'SAVED ON THIS DEVICE',
-    ready: 'Ready to run?', readyText: 'Jump crates, slide under signs, and chain coin streaks. Shift spends 30% charge to smash through hazards. Grab upgrades.', over: 'Run over', paused: 'Run paused', magnet: 'MAGNET', shield: 'SHIELD',
+    ready: 'Ready to run?', readyText: 'Hold jump for height; tap for a short hop. Follow coin trails over crates and under signs. Shift spends 50% charge to smash hazards.', over: 'Run over', paused: 'Run paused', magnet: 'MAGNET', shield: 'SHIELD',
     start: 'Start run', again: 'Play again', resume: 'Resume', jump: 'JUMP', slide: 'SLIDE',
   }
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const sceneRef = useRef<Scene>(createScene())
-  const inputRef = useRef({ jump: false, slide: false, dash: false })
+  const [initialScene] = useState(createScene)
+  const sceneRef = useRef(initialScene)
+  const inputRef = useRef({ jump: false, jumpHeld: false, slide: false, dash: false })
   const fallbackName = locale === 'pl' ? 'Gracz' : 'Player'
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready')
   const [score, setScore] = useState(0)
   const [coins, setCoins] = useState(0)
   const [streak, setStreak] = useState(0)
-  const [dashFuel, setDashFuel] = useState(0)
+  const [dashFuel, setDashFuel] = useState(50)
   const [powerState, setPowerState] = useState('')
   const [nickname, setNickname] = useState(fallbackName)
   const [records, setRecords] = useState<ScoreEntry[]>([])
   const [saved, setSaved] = useState(false)
+  const [runBest, setRunBest] = useState(0)
+  useEffect(() => { if (status === 'over') saveScore() }, [status])
+  useGameSession(status, setStatus, start)
   const best = records[0]?.score ?? 0
 
   useEffect(() => {
@@ -210,14 +227,14 @@ export function Game({ locale }: GameProps) {
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select')) return
       const key = event.key.toLowerCase()
       if ([' ', 'arrowup', 'arrowdown', 'w', 's', 'shift', 'x'].includes(key)) event.preventDefault()
-      if ([' ', 'arrowup', 'w'].includes(key) && !event.repeat) inputRef.current.jump = true
+      if ([' ', 'arrowup', 'w'].includes(key) && !event.repeat) { inputRef.current.jump = true; inputRef.current.jumpHeld = true }
       if (['arrowdown', 's'].includes(key)) inputRef.current.slide = true
       if ((key === 'shift' || key === 'x') && !event.repeat) inputRef.current.dash = true
-      if (event.key === 'Escape') setStatus('paused')
     }
     function keyUp(event: KeyboardEvent) {
       const key = event.key.toLowerCase()
       if (['arrowdown', 's'].includes(key)) inputRef.current.slide = false
+      if ([' ', 'arrowup', 'w'].includes(key)) inputRef.current.jumpHeld = false
     }
     function finish() {
       setScore(scene.score)
@@ -229,7 +246,9 @@ export function Game({ locale }: GameProps) {
       previousTime = time
       scene.elapsed += delta
       scene.flash = Math.max(0, scene.flash - delta)
-      const speed = 310 + Math.min(260, scene.elapsed * 7)
+      const speed = runnerSpeed(scene.elapsed) * (scene.dashTimer > 0 ? 1.28 : 1)
+      scene.messageTimer = Math.max(0, scene.messageTimer - delta)
+      scene.dashFuel = Math.min(100, scene.dashFuel + delta * 2.5)
       scene.dashTimer = Math.max(0, scene.dashTimer - delta)
       scene.magnetTimer = Math.max(0, scene.magnetTimer - delta)
       scene.streakTimer = Math.max(0, scene.streakTimer - delta)
@@ -238,16 +257,15 @@ export function Game({ locale }: GameProps) {
         setStreak(0)
       }
       if (inputRef.current.dash) {
-        if (scene.dashFuel >= 30 && scene.dashTimer <= 0) {
-          scene.dashFuel -= 30
-          scene.dashTimer = 1.1
+        if (scene.dashFuel >= 50 && scene.dashTimer <= 0) {
+          scene.dashFuel -= 50
+          scene.dashTimer = 0.65
           scene.flash = 0.12
           addBurst(scene, PLAYER_X, scene.playerY + PLAYER_HEIGHT / 2, '#9bf3d0')
         }
         inputRef.current.dash = false
       }
       setDashFuel(Math.floor(scene.dashFuel))
-      const playerHeight = inputRef.current.slide && scene.grounded ? 29 : PLAYER_HEIGHT
       if (inputRef.current.jump) scene.jumpBuffer = 0.13
       inputRef.current.jump = false
       scene.jumpBuffer = Math.max(0, scene.jumpBuffer - delta)
@@ -258,6 +276,8 @@ export function Game({ locale }: GameProps) {
         addBurst(scene, PLAYER_X, scene.playerY + PLAYER_HEIGHT, '#ffe17a')
       }
       if (!scene.grounded) {
+        if (!inputRef.current.jumpHeld && scene.playerVY < -280) scene.playerVY = -280
+        if (inputRef.current.slide && scene.playerVY > 0) scene.playerVY += GRAVITY * delta
         scene.playerY += scene.playerVY * delta
         scene.playerVY += GRAVITY * delta
         if (scene.playerY + PLAYER_HEIGHT >= GROUND) {
@@ -267,17 +287,15 @@ export function Game({ locale }: GameProps) {
           scene.flash = 0.08
         }
       }
+      const playerHeight = inputRef.current.slide && scene.grounded ? 29 : PLAYER_HEIGHT
       scene.distance += speed * delta * 0.05
       scene.spawnTimer -= delta
       if (scene.spawnTimer <= 0) {
-        scene.obstacles.push({ x: WIDTH + 25, kind: Math.random() < 0.68 ? 'crate' : 'sign' })
-        scene.spawnTimer = 1.13 + Math.random() * 0.55
-      }
-      scene.coinTimer -= delta
-      if (scene.coinTimer <= 0) {
-        const baseY = [GROUND - 68, GROUND - 119, GROUND - 82][Math.floor(Math.random() * 3)]
-        for (let index = 0; index < 3; index += 1) scene.coins.push({ x: WIDTH + 40 + index * 35, y: baseY + Math.sin(index * 1.3) * 13, phase: index })
-        scene.coinTimer = 2.15 + Math.random() * 1.05
+        const section = makeSection(WIDTH + 40, speed, scene.section, Math.floor(Math.random() * 3))
+        scene.obstacles.push(...section.obstacles)
+        scene.coins.push(...section.coins)
+        scene.spawnTimer = section.length / speed
+        scene.section += 1
       }
       scene.pickupTimer -= delta
       if (scene.pickupTimer <= 0) {
@@ -287,13 +305,21 @@ export function Game({ locale }: GameProps) {
       for (let index = scene.obstacles.length - 1; index >= 0; index -= 1) {
         const obstacle = scene.obstacles[index]
         obstacle.x -= speed * delta
-        if (obstacle.x < -70) scene.obstacles.splice(index, 1)
+        if (obstacle.x < -70) { scene.obstacles.splice(index, 1); continue }
+        if (!obstacle.passed && obstacle.x + (obstacle.kind === 'crate' ? 34 : 58) < PLAYER_X - PLAYER_WIDTH / 2) {
+          obstacle.passed = true
+          scene.bonusScore += 20
+          scene.dashFuel = Math.min(100, scene.dashFuel + 5)
+        }
         const obstacleY = obstacle.kind === 'crate' ? GROUND - 38 : GROUND - 78
         const obstacleWidth = obstacle.kind === 'crate' ? 34 : 58
         const obstacleHeight = obstacle.kind === 'crate' ? 38 : 34
         const playerY = scene.grounded ? GROUND - playerHeight : scene.playerY
         if (PLAYER_X + PLAYER_WIDTH / 2 - 3 > obstacle.x && PLAYER_X - PLAYER_WIDTH / 2 + 3 < obstacle.x + obstacleWidth && playerY + playerHeight > obstacleY && playerY < obstacleY + obstacleHeight) {
           if (scene.dashTimer > 0) {
+            scene.bonusScore += 75
+            scene.message = '+75 ⚡'
+            scene.messageTimer = 0.7
             addBurst(scene, obstacle.x + obstacleWidth / 2, obstacleY + obstacleHeight / 2, '#9bf3d0')
             scene.obstacles.splice(index, 1)
           } else if (scene.shieldCharges > 0) {
@@ -324,7 +350,7 @@ export function Game({ locale }: GameProps) {
         if (Math.abs(coin.x - PLAYER_X) < (scene.magnetTimer > 0 ? 30 : 26) && coin.y >= playerY - 8 && coin.y <= playerY + playerHeight + 10) {
           scene.coinsCollected += 1
           scene.coinStreak = scene.streakTimer > 0 ? scene.coinStreak + 1 : 1
-          scene.streakTimer = 2.3
+          scene.streakTimer = 4.5
           scene.dashFuel = Math.min(100, scene.dashFuel + 9)
           scene.bonusScore += Math.min(5, scene.coinStreak - 1) * 5
           if (scene.dashTimer > 0) scene.bonusScore += 25
@@ -374,17 +400,18 @@ export function Game({ locale }: GameProps) {
       window.cancelAnimationFrame(animationFrame)
       window.removeEventListener('keydown', keyDown)
       window.removeEventListener('keyup', keyUp)
-      inputRef.current = { jump: false, slide: false, dash: false }
+      inputRef.current = { jump: false, jumpHeld: false, slide: false, dash: false }
     }
   }, [status])
 
   function start() {
+    setRunBest(records[0]?.score ?? 0)
     sceneRef.current = createScene()
-    inputRef.current = { jump: false, slide: false, dash: false }
+    inputRef.current = { jump: false, jumpHeld: false, slide: false, dash: false }
     setScore(0)
     setCoins(0)
     setStreak(0)
-    setDashFuel(0)
+    setDashFuel(50)
     setPowerState('')
     setSaved(false)
     setStatus('playing')
@@ -411,9 +438,9 @@ export function Game({ locale }: GameProps) {
         {status === 'playing' && <div className="arcade-livebar"><span>{copy.jump} · {copy.slide}{streak > 1 ? ` · ${copy.streak} ×${streak}` : ''}{powerState ? ` · ${powerState}` : ''}</span><div className="arcade-live-actions"><label className="boost-meter"><span>{copy.dash}</span><span className="boost-meter-track"><i style={{ width: `${dashFuel}%` }} /></span><span>{dashFuel}%</span></label><button onClick={() => setStatus('paused')}>Ⅱ {copy.pause}</button></div></div>}
         <div className="canvas-wrap arcade-canvas-wrap runner-canvas-wrap">
           <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Trasa Rooftop Runner' : 'Rooftop Runner course'} />
-          {status !== 'playing' && <div className="game-overlay"><span className="overlay-spark">{status === 'over' ? '✦' : '↗'}</span><strong>{status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready}</strong><span>{status === 'over' ? `${copy.score}: ${score} · ${copy.coins}: ${coins}` : copy.readyText}</span>{status === 'over' && score > 0 && !saved && <button className="game-button game-button-soft" onClick={saveScore}>{copy.save}</button>}<button className="game-button" onClick={status === 'paused' ? () => setStatus('playing') : start}>{status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start}<span>→</span></button></div>}
+          <GameOverlay status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Ślad monet prowadzi przez przeszkodę. Zachowaj dopalacz na trudne miejsce.' : 'Coin trails show the route through. Save a boost for a tight spot.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.coins, value: coins }, { label: locale === 'pl' ? 'DYSTANS' : 'DISTANCE', value: `${Math.floor(sceneRef.current.distance)}m` }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }] }} />
         </div>
-        <div className="game-touch-controls runner-touch-controls"><button onPointerDown={() => { inputRef.current.jump = true }} aria-label={copy.jump}>↑ {copy.jump}</button><button onPointerDown={() => { inputRef.current.slide = true }} onPointerUp={() => { inputRef.current.slide = false }} onPointerCancel={() => { inputRef.current.slide = false }} onPointerLeave={() => { inputRef.current.slide = false }} aria-label={copy.slide}>↓ {copy.slide}</button><button onPointerDown={() => { inputRef.current.dash = true }} aria-label={copy.dash}>⚡ {copy.dash}</button></div>
+        <div className="game-touch-controls runner-touch-controls"><button onPointerDown={() => { inputRef.current.jump = true; inputRef.current.jumpHeld = true }} onPointerUp={() => { inputRef.current.jumpHeld = false }} onPointerCancel={() => { inputRef.current.jumpHeld = false }} onPointerLeave={() => { inputRef.current.jumpHeld = false }} aria-label={copy.jump}>↑ {copy.jump}</button><button onPointerDown={() => { inputRef.current.slide = true }} onPointerUp={() => { inputRef.current.slide = false }} onPointerCancel={() => { inputRef.current.slide = false }} onPointerLeave={() => { inputRef.current.slide = false }} aria-label={copy.slide}>↓ {copy.slide}</button><button disabled={status !== 'playing' || dashFuel < 50} onPointerDown={() => { inputRef.current.dash = true }} aria-label={copy.dash}>⚡ {copy.dash}</button></div>
         <p className="arcade-controls-note"><span>{copy.jump} <kbd>SPACE</kbd> <kbd>↑</kbd> <kbd>W</kbd></span><span>{copy.slide} <kbd>↓</kbd> <kbd>S</kbd></span><span>{copy.dash} <kbd>SHIFT</kbd> <kbd>X</kbd></span></p>
       </div>
       <aside className="game-scoreboard arcade-scoreboard"><div className="scoreboard-heading"><span className="game-small-label">{copy.history}</span><span className="scoreboard-star">✳</span></div><div className="arcade-record-number">{coins.toString().padStart(2, '0')}</div><p className="scoreboard-foot">{copy.coins}</p><label className="game-field"><span>{copy.nickname}</span><input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} /></label><div className="scoreboard-rule" /><div className="scoreboard-list">{records.length ? records.map((record, index) => <div className="scoreboard-row" key={`${record.name}-${record.score}-${index}`}><span className="score-rank">{String(index + 1).padStart(2, '0')}</span><span className="score-name">{record.name}</span><strong>{record.score}</strong></div>) : <p className="scoreboard-empty">{copy.empty}</p>}</div><div className="scoreboard-foot">{copy.local}</div></aside>

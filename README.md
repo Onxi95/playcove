@@ -29,7 +29,6 @@ Games should be compelling and replayable through responsive controls, satisfyin
 - Brick Breaker — solo arcade game
 - Neon Snake — solo endless arcade game
 - Paddle Duel — local two-player arcade game
-- Penguin Launch — solo flight career with local upgrades and unlockable ramps
 - Rooftop Runner — solo endless runner
 - Soccer Duel — solo vs bot or local two player sports game
 - Star Patrol — solo wave-based shooter

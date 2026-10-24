@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
+import { useGameSession } from '../kit/use-game-session.ts'
+import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { ballInKickRange, botSettings, shotProfile } from './mechanics.ts'
+import type { BotDifficulty, ShotAim } from './mechanics.ts'
 
 type Mode = 'bot' | 'local'
 type LevelId = 'practice' | 'coast' | 'rooftop'
-type ShotAim = 'lob' | 'drive' | 'ground'
-type Player = { x: number; y: number; vx: number; vy: number; facing: number; grounded: boolean; kickTimer: number; kickCooldown: number; kickBuffer: number; aim: ShotAim }
+type Player = { jumpBuffer: number; charge: number; x: number; y: number; vx: number; vy: number; facing: number; grounded: boolean; kickTimer: number; kickCooldown: number; kickBuffer: number; aim: ShotAim }
 type Ball = { x: number; y: number; vx: number; vy: number; rotation: number; kickFlash: number }
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; duration: number; color: string }
-type Match = { players: [Player, Player]; ball: Ball; score: [number, number]; resetTimer: number; particles: Particle[] }
+type Match = { elapsed: number; players: [Player, Player]; ball: Ball; score: [number, number]; resetTimer: number; particles: Particle[] }
 type MatchRecord = { winner: string; final: string; level: string; mode: string }
 
 const WIDTH = 900
@@ -30,11 +33,12 @@ const arenas: Record<LevelId, { sky: string; ground: string; light: string; wind
 }
 
 function createPlayer(x: number, facing: number): Player {
-  return { x, y: GROUND - PLAYER_HEIGHT, vx: 0, vy: 0, facing, grounded: true, kickTimer: 0, kickCooldown: 0, kickBuffer: 0, aim: 'drive' }
+  return { jumpBuffer: 0, charge: 0, x, y: GROUND - PLAYER_HEIGHT, vx: 0, vy: 0, facing, grounded: true, kickTimer: 0, kickCooldown: 0, kickBuffer: 0, aim: 'drive' }
 }
 
 function createMatch(): Match {
   return {
+    elapsed: 0,
     players: [createPlayer(218, 1), createPlayer(682, -1)],
     ball: { x: WIDTH / 2, y: GROUND - 152, vx: 115, vy: -130, rotation: 0, kickFlash: 0 },
     score: [0, 0],
@@ -48,13 +52,6 @@ function windAt(time: number, level: LevelId) {
   if (arena.wind === 0) return 0
   const gust = Math.sin(time / 1300) * 0.55 + Math.sin(time / 510) * 0.3
   return level === 'coast' ? gust * arena.wind : arena.wind * 0.55 + gust * arena.wind * 0.45
-}
-
-function shotProfile(player: Player) {
-  return {
-    horizontal: player.aim === 'lob' ? 610 : player.aim === 'ground' ? 780 : 665,
-    vertical: player.aim === 'lob' ? -470 + Math.min(0, player.vy * 0.08) : player.aim === 'ground' ? -120 : -255,
-  }
 }
 
 function drawGoal(context: CanvasRenderingContext2D, side: 'left' | 'right') {
@@ -94,8 +91,14 @@ function drawPlayer(context: CanvasRenderingContext2D, player: Player, ball: Bal
   const legSwing = player.grounded && Math.abs(player.vx) > 12 ? Math.sin(time / 45) * 7 : 0
   const footX = x + player.facing * (PLAYER_WIDTH / 2 + 12)
   const footY = y + 56
-  const hasBallInRange = (ball.x - player.x) * player.facing >= 6 && Math.hypot(ball.x - footX, ball.y - footY) <= 62
+  const hasBallInRange = ballInKickRange(ball, player)
 
+  if (player.charge > 0) {
+    context.fillStyle = '#ffffff55'
+    context.fillRect(x - 20, y - 12, 40, 4)
+    context.fillStyle = player.charge >= 1 ? '#ffe17a' : '#fff'
+    context.fillRect(x - 20, y - 12, 40 * player.charge, 4)
+  }
   context.fillStyle = '#263447'
   context.beginPath()
   context.roundRect(x - 16, y + 46, 32, 15, 5)
@@ -167,7 +170,7 @@ function drawPlayer(context: CanvasRenderingContext2D, player: Player, ball: Bal
 
 function drawScene(context: CanvasRenderingContext2D, match: Match, level: LevelId, time: number, goalLabel: string) {
   const arena = arenas[level]
-  const wind = windAt(time, level)
+  const wind = windAt(match.elapsed * 1000, level)
   context.clearRect(0, 0, WIDTH, HEIGHT)
   context.fillStyle = arena.sky
   context.fillRect(0, 0, WIDTH, GROUND)
@@ -355,13 +358,13 @@ export function Game({ locale }: GameProps) {
       rooftop: { name: 'Dach', detail: 'Silny boczny wiatr', wind: 'SILNY WIATR' },
     },
     player: (number: number) => `Gracz ${number}`, bot: 'Bot', name: (number: number) => `IMIĘ GRACZA ${number}`,
-    heading: 'Mecz do trzech goli', ready: 'Gotowi na mecz?', readyDetail: 'Przytrzymaj W dla loba lub S dla niskiego strzału. Kropki pokazują tor; strzał zapamięta się tuż przed kontaktem z piłką.', goal: 'GOL!',
+    heading: 'Mecz do trzech goli', ready: 'Gotowi na mecz?', readyDetail: 'W skacze, Q celuje lobem, S nisko. Dotknij strzału albo przytrzymaj i puść dla większej mocy. Kropki pokazują cel.', goal: 'GOL!',
     paused: 'Mecz wstrzymany', pause: 'Pauza', over: 'Koniec meczu', score: 'WYNIK', wind: 'WIATR',
     start: 'Rozpocznij mecz', resume: 'Wznów mecz', rematch: 'Rewanż', save: 'Zapisz wynik',
     history: 'HISTORIA MECZÓW', empty: 'Zapisane wyniki pojawią się tutaj.', local: 'ZAPISANO NA TYM URZĄDZENIU',
     p1Controls: 'GRACZ 1', p2Controls: 'GRACZ 2', move: 'RUCH', jump: 'SKOK', kick: 'STRZAŁ', low: 'NISKO',
-    aimHintBot: 'W + SPACJA: LOB · S + SPACJA: NISKO · KROPKI POKAZUJĄ TOR', aimHintLocal: 'P1: W + SPACJA LOB · S + SPACJA NISKO  |  P2: ↑ + ENTER LOB · ↓ + ENTER NISKO',
-    touchAimHintBot: 'Przytrzymaj ↑ dla loba lub ↓ dla niskiego strzału, potem STRZAŁ. Kropki pokazują tor.', touchAimHintLocal: 'P1 i P2: ↑ + STRZAŁ lobuje · ↓ + STRZAŁ uderza nisko. Kropki pokazują tor.',
+    aimHintBot: 'Q: LOB · S: NISKO · PRZYTRZYMAJ STRZAŁ DLA MOCY, PUŚĆ BY UDERZYĆ', aimHintLocal: 'P1: W + SPACJA LOB · S + SPACJA NISKO  |  P2: ↑ + ENTER LOB · ↓ + ENTER NISKO',
+    touchAimHintBot: '↑ skacze · ⌒ celuje lobem · ↓ nisko. Przytrzymaj i puść STRZAŁ dla mocy.', touchAimHintLocal: '↑ skacze · ⌒ celuje lobem · ↓ nisko. Przytrzymaj i puść STRZAŁ dla mocy.',
   } : {
     mode: 'MODE', botMode: 'Vs bot', localMode: '2 players', level: 'CHOOSE AN ARENA', kickoff: 'FIRST TO 3 GOALS',
     levels: {
@@ -370,22 +373,24 @@ export function Game({ locale }: GameProps) {
       rooftop: { name: 'Rooftop', detail: 'Strong crosswind', wind: 'STRONG WIND' },
     },
     player: (number: number) => `Player ${number}`, bot: 'Bot', name: (number: number) => `PLAYER ${number} NAME`,
-    heading: 'First to three goals', ready: 'Ready for kickoff?', readyDetail: 'Hold W for a lob or S for a low shot. Dots preview the flight; kicks buffer briefly before ball contact.', goal: 'GOAL!',
+    heading: 'First to three goals', ready: 'Ready for kickoff?', readyDetail: 'W jumps, Q aims a lob, S aims low. Tap kick for a quick shot or hold and release for power. Dots show your aim.', goal: 'GOAL!',
     paused: 'Match paused', pause: 'Pause', over: 'Full time', score: 'SCORE', wind: 'WIND',
     start: 'Start match', resume: 'Resume match', rematch: 'Rematch', save: 'Save result',
     history: 'MATCH HISTORY', empty: 'Saved results will show up here.', local: 'SAVED ON THIS DEVICE',
     p1Controls: 'PLAYER 1', p2Controls: 'PLAYER 2', move: 'MOVE', jump: 'JUMP', kick: 'KICK', low: 'LOW',
-    aimHintBot: 'W + SPACE: LOB · S + SPACE: LOW · DOTS PREVIEW FLIGHT', aimHintLocal: 'P1: W + SPACE LOB · S + SPACE LOW  |  P2: ↑ + ENTER LOB · ↓ + ENTER LOW',
-    touchAimHintBot: 'Hold ↑ for a lob or ↓ for a low shot, then tap KICK. Dots preview flight.', touchAimHintLocal: 'P1 and P2: hold ↑ + KICK for a lob · ↓ + KICK for low. Dots preview flight.',
+    aimHintBot: 'Q: LOB · S: LOW · HOLD KICK FOR POWER, RELEASE TO SHOOT', aimHintLocal: 'P1: W + SPACE LOB · S + SPACE LOW  |  P2: ↑ + ENTER LOB · ↓ + ENTER LOW',
+    touchAimHintBot: '↑ jumps · ⌒ aims a lob · ↓ aims low. Hold and release KICK for power.', touchAimHintLocal: '↑ jumps · ⌒ aims a lob · ↓ aims low. Hold and release KICK for power.',
   }
 
   const fallbackP1 = copy.player(1)
   const fallbackP2 = copy.player(2)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const matchRef = useRef<Match>(createMatch())
-  const inputRef = useRef({ p1Left: false, p1Right: false, p1Jump: false, p1AimUp: false, p1AimDown: false, p1Kick: false, p2Left: false, p2Right: false, p2Jump: false, p2AimUp: false, p2AimDown: false, p2Kick: false })
+  const [initialScene] = useState(createMatch)
+  const matchRef = useRef(initialScene)
+  const inputRef = useRef({ p1Left: false, p1Right: false, p1Jump: false, p1AimUp: false, p1AimDown: false, p1Kick: false, p1KickHeld: false, p2Left: false, p2Right: false, p2Jump: false, p2AimUp: false, p2AimDown: false, p2Kick: false, p2KickHeld: false })
   const [mode, setMode] = useState<Mode>('bot')
   const [level, setLevel] = useState<LevelId>('practice')
+  const [difficulty, setDifficulty] = useState<BotDifficulty>('club')
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready')
   const [score, setScore] = useState<[number, number]>([0, 0])
   const [wind, setWind] = useState(0)
@@ -393,6 +398,8 @@ export function Game({ locale }: GameProps) {
   const [p2Name, setP2Name] = useState(fallbackP2)
   const [records, setRecords] = useState<MatchRecord[]>([])
   const [saved, setSaved] = useState(false)
+  useEffect(() => { if (status === 'over') saveScore() }, [status])
+  useGameSession(status, setStatus, startMatch)
 
   useEffect(() => {
     setP1Name(readName('playcove.soccer-duel.player-1', fallbackP1))
@@ -415,26 +422,28 @@ export function Game({ locale }: GameProps) {
     let animationFrame = 0
     let previousTime = 0
     let previousWindUpdate = 0
+    let botTimer = 0
+    let botTarget = WIDTH * 0.73
+    let botJump = false
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select')) return
       const key = event.key.toLowerCase()
-      if (key.startsWith('arrow') || key === ' ' || ['a', 'd', 'w', 's'].includes(key)) event.preventDefault()
+      if (key.startsWith('arrow') || key === ' ' || ['a', 'd', 'w', 's', 'q'].includes(key)) event.preventDefault()
       if (key === 'a') inputRef.current.p1Left = true
       if (key === 'd') inputRef.current.p1Right = true
-      if (key === 'w') inputRef.current.p1AimUp = true
+      if (key === 'q') inputRef.current.p1AimUp = true
       if (key === 's') inputRef.current.p1AimDown = true
       if (key === 'w' && !event.repeat) inputRef.current.p1Jump = true
-      if (event.code === 'Space' && !event.repeat) inputRef.current.p1Kick = true
+      if (event.code === 'Space' && !event.repeat) inputRef.current.p1KickHeld = true
       if (mode === 'local') {
         if (key === 'arrowleft') inputRef.current.p2Left = true
         if (key === 'arrowright') inputRef.current.p2Right = true
-        if (key === 'arrowup') inputRef.current.p2AimUp = true
+        if (key === 'shift') { event.preventDefault(); inputRef.current.p2AimUp = true }
         if (key === 'arrowdown') inputRef.current.p2AimDown = true
         if (key === 'arrowup' && !event.repeat) inputRef.current.p2Jump = true
-        if (event.code === 'Enter' && !event.repeat) inputRef.current.p2Kick = true
+        if (event.code === 'Enter' && !event.repeat) { event.preventDefault(); inputRef.current.p2KickHeld = true }
       }
-      if (event.key === 'Escape') setStatus('paused')
     }
 
     function handleKeyUp(event: KeyboardEvent) {
@@ -443,28 +452,31 @@ export function Game({ locale }: GameProps) {
       if (key === 'd') inputRef.current.p1Right = false
       if (key === 'w') {
         inputRef.current.p1Jump = false
-        inputRef.current.p1AimUp = false
       }
+      if (key === 'q') inputRef.current.p1AimUp = false
       if (key === 's') inputRef.current.p1AimDown = false
+      if (event.code === 'Space' && inputRef.current.p1KickHeld) { inputRef.current.p1KickHeld = false; inputRef.current.p1Kick = true }
+      if (event.code === 'Enter' && inputRef.current.p2KickHeld) { inputRef.current.p2KickHeld = false; inputRef.current.p2Kick = true }
+      if (key === 'shift') inputRef.current.p2AimUp = false
       if (key === 'arrowleft') inputRef.current.p2Left = false
       if (key === 'arrowright') inputRef.current.p2Right = false
       if (key === 'arrowup') {
         inputRef.current.p2Jump = false
-        inputRef.current.p2AimUp = false
       }
       if (key === 'arrowdown') inputRef.current.p2AimDown = false
     }
 
-    function applyPlayerInput(player: Player, left: boolean, right: boolean, jump: boolean, delta: number) {
+    function applyPlayerInput(player: Player, left: boolean, right: boolean, jump: boolean, delta: number, maxSpeed = 425) {
       const direction = Number(right) - Number(left)
-      const maxSpeed = 425
       if (direction !== 0) {
         player.facing = direction
         player.vx += (direction * maxSpeed - player.vx) * Math.min(1, 17 * delta)
       } else {
         player.vx *= Math.max(0, 1 - 11 * delta)
       }
-      if (jump && player.grounded) {
+      player.jumpBuffer = jump ? 0.14 : Math.max(0, player.jumpBuffer - delta)
+      if (player.jumpBuffer > 0 && player.grounded) {
+        player.jumpBuffer = 0
         player.vy = -650
         player.grounded = false
       }
@@ -480,13 +492,25 @@ export function Game({ locale }: GameProps) {
     }
 
     function applyBotInput(player: Player, ball: Ball, delta: number) {
-      const defendX = WIDTH * 0.73
-      const chasing = ball.x > WIDTH * 0.43 || (ball.vx > 100 && ball.x > WIDTH * 0.34)
-      const targetX = chasing ? Math.max(WIDTH * 0.54, Math.min(WIDTH * 0.9, ball.x + 44)) : defendX
-      const direction = Math.abs(targetX - player.x) < 13 ? 0 : Math.sign(targetX - player.x)
-      const jump = Math.abs(ball.x - player.x) < 138 && ball.y < player.y + 18 && ball.y > GROUND - 250
-      player.aim = ball.y < player.y + 28 ? 'lob' : ball.y > GROUND - 62 ? 'ground' : 'drive'
-      applyPlayerInput(player, direction < 0, direction > 0, jump && player.grounded, delta)
+      const settings = botSettings[difficulty]
+      botTimer -= delta
+      let kick = false
+      if (botTimer <= 0) {
+        botTimer = settings.reaction
+        const predicted = ball.x + ball.vx * settings.reaction * 0.5
+        const error = Math.sin(match.elapsed * 2.3) * settings.accuracy
+        botTarget = Math.max(WIDTH * 0.25, Math.min(WIDTH - 76, predicted + 52 + error))
+        botJump = Math.abs(ball.x - player.x) < 110 && ball.y < GROUND - 100 && ball.y > GROUND - 260
+        const opponent = match.players[0]
+        player.aim = opponent.x < player.x && player.x - opponent.x < 180 && opponent.grounded ? 'lob' : !opponent.grounded ? 'ground' : 'drive'
+        kick = ball.x < player.x + 5 && ballInKickRange(ball, player)
+        if (kick) player.charge = difficulty === 'pro' ? 0.8 : 0.3
+      }
+      const direction = Math.abs(botTarget - player.x) < 12 ? 0 : Math.sign(botTarget - player.x)
+      applyPlayerInput(player, direction < 0, direction > 0, botJump && player.grounded, delta, settings.speed)
+      player.facing = ball.x < player.x ? -1 : 1
+      return kick
+
     }
 
     function collidePlayers(first: Player, second: Player) {
@@ -533,12 +557,12 @@ export function Game({ locale }: GameProps) {
     }
 
     function kickBall(player: Player, ball: Ball, requested: boolean, color: string) {
-      if (requested) player.kickBuffer = 0.16
+      if (requested) player.kickBuffer = 0.2
       if (player.kickBuffer <= 0 || player.kickCooldown > 0) return
 
       const footX = player.x + player.facing * (PLAYER_WIDTH / 2 + 12)
       const footY = player.y + 56
-      if ((ball.x - player.x) * player.facing < 6 || Math.hypot(ball.x - footX, ball.y - footY) > 62) return
+      if (!ballInKickRange(ball, player)) return
 
       const profile = shotProfile(player)
       ball.x = player.x + player.facing * (PLAYER_WIDTH / 2 + BALL_RADIUS + 2)
@@ -548,6 +572,7 @@ export function Game({ locale }: GameProps) {
       player.kickTimer = 0.2
       player.kickCooldown = 0.32
       player.kickBuffer = 0
+      player.charge = 0
       addBurst(match, ball.x, ball.y, color, 12)
     }
 
@@ -558,15 +583,21 @@ export function Game({ locale }: GameProps) {
     }
 
     function frame(time: number) {
-      const delta = Math.min((time - (previousTime || time)) / 1000, 0.025)
+      const frameDelta = Math.min((time - (previousTime || time)) / 1000, 0.05)
       previousTime = time
+      const steps = Math.max(1, Math.ceil(frameDelta * 120))
+      const delta = frameDelta / steps
+      let matchEnded = false
+      for (let step = 0; step < steps; step += 1) {
+      match.elapsed += delta
       const ball = match.ball
       const [first, second] = match.players
-      let matchEnded = false
       const p1Kick = inputRef.current.p1Kick
       const p2Kick = inputRef.current.p2Kick
       first.aim = inputRef.current.p1AimUp ? 'lob' : inputRef.current.p1AimDown ? 'ground' : 'drive'
       if (mode === 'local') second.aim = inputRef.current.p2AimUp ? 'lob' : inputRef.current.p2AimDown ? 'ground' : 'drive'
+      first.charge = inputRef.current.p1KickHeld ? Math.min(1, first.charge + delta * 1.4) : first.charge
+      if (mode === 'local') second.charge = inputRef.current.p2KickHeld ? Math.min(1, second.charge + delta * 1.4) : second.charge
       inputRef.current.p1Kick = false
       inputRef.current.p2Kick = false
       match.ball.rotation += match.ball.vx * delta / 22
@@ -596,15 +627,16 @@ export function Game({ locale }: GameProps) {
         applyPlayerInput(first, inputRef.current.p1Left, inputRef.current.p1Right, inputRef.current.p1Jump, delta)
         inputRef.current.p1Jump = false
 
+        let botKick = false
         if (mode === 'bot') {
-          applyBotInput(second, ball, delta)
+          botKick = applyBotInput(second, ball, delta)
         } else {
           applyPlayerInput(second, inputRef.current.p2Left, inputRef.current.p2Right, inputRef.current.p2Jump, delta)
           inputRef.current.p2Jump = false
         }
         collidePlayers(first, second)
 
-        const windForce = windAt(time, level)
+        const windForce = windAt(match.elapsed * 1000, level)
         ball.vx += windForce * delta
         ball.vy += GRAVITY * 0.56 * delta
         ball.x += ball.vx * delta
@@ -618,14 +650,13 @@ export function Game({ locale }: GameProps) {
           ball.y = GROUND - BALL_RADIUS
           if (Math.abs(ball.vy) > 95) ball.vy = -Math.abs(ball.vy) * 0.67
           else ball.vy = 0
-          ball.vx *= 0.975
+          ball.vx *= Math.exp(-1.5 * delta)
         }
 
         collideBallWithPlayer(ball, first)
         collideBallWithPlayer(ball, second)
         kickBall(first, ball, p1Kick, '#ffb08e')
-        const botInKickRange = (ball.x - second.x) * second.facing >= 6 && Math.hypot(ball.x - (second.x + second.facing * (PLAYER_WIDTH / 2 + 12)), ball.y - (second.y + 56)) <= 48
-        kickBall(second, ball, mode === 'bot' ? botInKickRange : p2Kick, '#b2c1ff')
+        kickBall(second, ball, mode === 'bot' ? botKick : p2Kick, '#b2c1ff')
 
         const insideGoalHeight = ball.y >= GOAL_TOP - BALL_RADIUS && ball.y < GROUND - BALL_RADIUS + 2
         const scoredOnLeft = ball.x < GOAL_INSET + GOAL_WIDTH && insideGoalHeight
@@ -654,9 +685,11 @@ export function Game({ locale }: GameProps) {
         }
       }
 
+      if (matchEnded) break
+      }
       drawScene(drawingContext, match, level, time, copy.goal)
       if (time - previousWindUpdate > 180) {
-        setWind(Math.round(windAt(time, level)))
+        setWind(Math.round(windAt(match.elapsed * 1000, level)))
         previousWindUpdate = time
       }
       if (!matchEnded) animationFrame = requestAnimationFrame(frame)
@@ -669,9 +702,9 @@ export function Game({ locale }: GameProps) {
       window.cancelAnimationFrame(animationFrame)
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
-      inputRef.current = { p1Left: false, p1Right: false, p1Jump: false, p1AimUp: false, p1AimDown: false, p1Kick: false, p2Left: false, p2Right: false, p2Jump: false, p2AimUp: false, p2AimDown: false, p2Kick: false }
+      inputRef.current = { p1Left: false, p1Right: false, p1Jump: false, p1AimUp: false, p1AimDown: false, p1Kick: false, p1KickHeld: false, p2Left: false, p2Right: false, p2Jump: false, p2AimUp: false, p2AimDown: false, p2Kick: false, p2KickHeld: false }
     }
-  }, [copy.goal, level, mode, status])
+  }, [copy.goal, difficulty, level, mode, status])
 
   function startMatch() {
     matchRef.current = createMatch()
@@ -741,6 +774,7 @@ export function Game({ locale }: GameProps) {
               <button className={mode === 'local' ? 'soccer-choice is-active' : 'soccer-choice'} onClick={() => selectMode('local')} disabled={!canChangeSetup} aria-pressed={mode === 'local'}>{copy.localMode}</button>
             </div>
           </div>
+          {mode === 'bot' && <div className="soccer-setup-row"><span className="soccer-setup-label">{locale === 'pl' ? 'POZIOM BOTA' : 'BOT LEVEL'}</span><div className="soccer-mode-options">{(['casual', 'club', 'pro'] satisfies BotDifficulty[]).map((id) => <button key={id} className={difficulty === id ? 'soccer-choice is-active' : 'soccer-choice'} disabled={!canChangeSetup} aria-pressed={difficulty === id} onClick={() => setDifficulty(id)}>{id === 'casual' ? locale === 'pl' ? 'Spokojny' : 'Casual' : id === 'club' ? locale === 'pl' ? 'Klubowy' : 'Club' : 'Pro'}</button>)}</div></div>}
           <div className="soccer-level-grid">
             {LEVEL_IDS.map((id) => (
               <button className={level === id ? 'soccer-level is-active' : 'soccer-level'} onClick={() => selectLevel(id)} disabled={!canChangeSetup} aria-pressed={level === id} key={id}>
@@ -753,15 +787,7 @@ export function Game({ locale }: GameProps) {
         <div className="soccer-matchbar"><span>{mode === 'bot' ? `${firstName} vs ${copy.bot}` : `${firstName} vs ${secondName}`}{status === 'playing' && <button onClick={() => setStatus('paused')}>{copy.pause}</button>}</span><strong>{windText}</strong></div>
         <div className="canvas-wrap soccer-canvas-wrap">
           <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Boisko do gry Soccer Duel' : 'Soccer Duel side-view arena'} />
-          {status !== 'playing' && (
-            <div className="game-overlay soccer-overlay">
-              <span className="overlay-spark">{status === 'over' ? '✦' : '⚽'}</span>
-              <strong>{status === 'over' ? `${winner} ${locale === 'pl' ? 'wygrywa!' : 'wins!'}` : status === 'paused' ? copy.paused : copy.ready}</strong>
-              <span>{status === 'over' ? `${copy.score}: ${score[0]}–${score[1]}` : copy.readyDetail}</span>
-              {status === 'over' && !saved && <button className="game-button game-button-soft" onClick={saveScore}>{copy.save}</button>}
-              <button className="game-button" onClick={status === 'paused' ? () => setStatus('playing') : startMatch}>{status === 'paused' ? copy.resume : status === 'over' ? copy.rematch : copy.start}<span>→</span></button>
-            </div>
-          )}
+          <GameOverlay status={status} locale={locale} title={status === 'over' ? `${winner} ${locale === 'pl' ? 'wygrywa!' : 'wins!'}` : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Zmień tor strzału: lob nad rywalem albo niski strzał pod wyskokiem.' : 'Change the shot: lob over a defender or drive low under a jump.') : copy.readyDetail} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.rematch : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startMatch} result={{ value: `${score[0]}–${score[1]}`, label: `${winner} ${locale === 'pl' ? 'wygrywa!' : 'wins!'}`, saved, stats: [{ label: copy.level, value: copy.levels[level].name }, { label: copy.mode, value: mode === 'bot' ? copy.botMode : copy.localMode }] }} />
         </div>
 
         <div className="module-controls-caption soccer-keyboard-controls">
@@ -776,17 +802,19 @@ export function Game({ locale }: GameProps) {
             <span>{copy.p1Controls}</span>
             <button aria-label={locale === 'pl' ? 'Gracz 1 w lewo' : 'Player 1 left'} onPointerDown={() => hold('p1Left', true)} onPointerUp={() => hold('p1Left', false)} onPointerCancel={() => hold('p1Left', false)} onPointerLeave={() => hold('p1Left', false)}>←</button>
             <button aria-label={locale === 'pl' ? 'Gracz 1 w prawo' : 'Player 1 right'} onPointerDown={() => hold('p1Right', true)} onPointerUp={() => hold('p1Right', false)} onPointerCancel={() => hold('p1Right', false)} onPointerLeave={() => hold('p1Right', false)}>→</button>
-            <button aria-label={locale === 'pl' ? 'Gracz 1 skok i lob' : 'Player 1 jump and lob aim'} onPointerDown={() => { hold('p1Jump', true); hold('p1AimUp', true) }} onPointerUp={() => { hold('p1Jump', false); hold('p1AimUp', false) }} onPointerCancel={() => { hold('p1Jump', false); hold('p1AimUp', false) }} onPointerLeave={() => { hold('p1Jump', false); hold('p1AimUp', false) }}>↑</button>
+            <button aria-label={locale === 'pl' ? 'Gracz 1 skok' : 'Player 1 jump'} onPointerDown={() => hold('p1Jump', true)}>↑</button>
+            <button aria-label={locale === 'pl' ? 'Celuj lobem' : 'Aim lob'} onPointerDown={() => hold('p1AimUp', true)} onPointerUp={() => hold('p1AimUp', false)} onPointerCancel={() => hold('p1AimUp', false)} onPointerLeave={() => hold('p1AimUp', false)}>⌒</button>
             <button className="soccer-aim-button" title={copy.low} aria-label={locale === 'pl' ? 'Gracz 1 niski strzał' : 'Player 1 low shot aim'} onPointerDown={() => hold('p1AimDown', true)} onPointerUp={() => hold('p1AimDown', false)} onPointerCancel={() => hold('p1AimDown', false)} onPointerLeave={() => hold('p1AimDown', false)}>↓</button>
-            <button className="soccer-kick-button" aria-label={locale === 'pl' ? 'Gracz 1 strzał' : 'Player 1 kick'} onPointerDown={() => hold('p1Kick', true)}>{copy.kick}</button>
+            <button className="soccer-kick-button" aria-label={locale === 'pl' ? 'Gracz 1 strzał' : 'Player 1 kick'} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); hold('p1KickHeld', true) }} onPointerUp={() => { hold('p1KickHeld', false); hold('p1Kick', true) }} onPointerCancel={() => hold('p1KickHeld', false)}>{copy.kick}</button>
           </div>
           {mode === 'local' && <div className="soccer-touch-player">
             <span>{copy.p2Controls}</span>
             <button aria-label={locale === 'pl' ? 'Gracz 2 w lewo' : 'Player 2 left'} onPointerDown={() => hold('p2Left', true)} onPointerUp={() => hold('p2Left', false)} onPointerCancel={() => hold('p2Left', false)} onPointerLeave={() => hold('p2Left', false)}>←</button>
             <button aria-label={locale === 'pl' ? 'Gracz 2 w prawo' : 'Player 2 right'} onPointerDown={() => hold('p2Right', true)} onPointerUp={() => hold('p2Right', false)} onPointerCancel={() => hold('p2Right', false)} onPointerLeave={() => hold('p2Right', false)}>→</button>
-            <button aria-label={locale === 'pl' ? 'Gracz 2 skok i lob' : 'Player 2 jump and lob aim'} onPointerDown={() => { hold('p2Jump', true); hold('p2AimUp', true) }} onPointerUp={() => { hold('p2Jump', false); hold('p2AimUp', false) }} onPointerCancel={() => { hold('p2Jump', false); hold('p2AimUp', false) }} onPointerLeave={() => { hold('p2Jump', false); hold('p2AimUp', false) }}>↑</button>
+            <button aria-label={locale === 'pl' ? 'Gracz 2 skok' : 'Player 2 jump'} onPointerDown={() => hold('p2Jump', true)}>↑</button>
+            <button aria-label={locale === 'pl' ? 'Celuj lobem' : 'Aim lob'} onPointerDown={() => hold('p2AimUp', true)} onPointerUp={() => hold('p2AimUp', false)} onPointerCancel={() => hold('p2AimUp', false)} onPointerLeave={() => hold('p2AimUp', false)}>⌒</button>
             <button className="soccer-aim-button" title={copy.low} aria-label={locale === 'pl' ? 'Gracz 2 niski strzał' : 'Player 2 low shot aim'} onPointerDown={() => hold('p2AimDown', true)} onPointerUp={() => hold('p2AimDown', false)} onPointerCancel={() => hold('p2AimDown', false)} onPointerLeave={() => hold('p2AimDown', false)}>↓</button>
-            <button className="soccer-kick-button" aria-label={locale === 'pl' ? 'Gracz 2 strzał' : 'Player 2 kick'} onPointerDown={() => hold('p2Kick', true)}>{copy.kick}</button>
+            <button className="soccer-kick-button" aria-label={locale === 'pl' ? 'Gracz 2 strzał' : 'Player 2 kick'} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); hold('p2KickHeld', true) }} onPointerUp={() => { hold('p2KickHeld', false); hold('p2Kick', true) }} onPointerCancel={() => hold('p2KickHeld', false)}>{copy.kick}</button>
           </div>}
         </div>
       </div>

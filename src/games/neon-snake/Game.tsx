@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
+import { useGameSession } from '../kit/use-game-session.ts'
+import { GameOverlay } from '../kit/GameOverlay.tsx'
 
-type Cell = { x: number; y: number }
+import { fruitScore, queueTurn, snakeStep } from './mechanics.ts'
+import type { Cell } from './mechanics.ts'
 type Direction = { x: number; y: number }
 type Food = Cell & { golden: boolean }
-type Scene = { snake: Cell[]; direction: Direction; food: Food; score: number; eaten: number; elapsed: number; goldenTimer: number; combo: number; comboTimer: number; boostFuel: number }
+type Scene = { previousSnake: Cell[]; bonus: Food | null; flash: number; message: string; snake: Cell[]; direction: Direction; food: Food; score: number; eaten: number; elapsed: number; goldenTimer: number; combo: number; comboTimer: number; boostFuel: number }
 type ScoreEntry = { name: string; score: number }
 
 const CELLS = 24
@@ -26,10 +29,10 @@ function randomFood(snake: Cell[], golden: boolean): Food {
 
 function createScene(): Scene {
   const snake = [{ x: 9, y: 12 }, { x: 8, y: 12 }, { x: 7, y: 12 }]
-  return { snake, direction: { x: 1, y: 0 }, food: randomFood(snake, false), score: 0, eaten: 0, elapsed: 0, goldenTimer: 0, combo: 0, comboTimer: 0, boostFuel: 35 }
+  return { previousSnake: snake.map((part) => ({ ...part })), bonus: null, flash: 0, message: '', snake, direction: { x: 1, y: 0 }, food: randomFood(snake, false), score: 0, eaten: 0, elapsed: 0, goldenTimer: 0, combo: 0, comboTimer: 0, boostFuel: 35 }
 }
 
-function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: number) {
+function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: number, progress = 1) {
   context.clearRect(0, 0, SIZE, SIZE)
   context.fillStyle = '#102b34'
   context.fillRect(0, 0, SIZE, SIZE)
@@ -39,6 +42,10 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
     context.fillRect(index * CELL, (index % 2) * CELL, CELL, SIZE)
   }
 
+  if (scene.flash > 0) {
+    context.fillStyle = `rgba(188,255,208,${scene.flash * 0.3})`
+    context.fillRect(0, 0, SIZE, SIZE)
+  }
   const pulse = 1 + Math.sin(time / 130) * 0.08
   context.save()
   context.shadowColor = scene.food.golden ? '#ffd36a' : '#ff6d81'
@@ -47,19 +54,24 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   context.beginPath()
   context.arc((scene.food.x + 0.5) * CELL, (scene.food.y + 0.5) * CELL, CELL * 0.29 * pulse, 0, Math.PI * 2)
   context.fill()
-  if (scene.food.golden) {
+  if (scene.bonus) {
     context.globalAlpha = Math.min(1, scene.goldenTimer / 1.4)
+    context.fillStyle = '#ffd36a'
+    context.shadowColor = '#ffd36a'
     context.strokeStyle = '#fff0b7'
     context.lineWidth = 2
     context.beginPath()
-    context.arc((scene.food.x + 0.5) * CELL, (scene.food.y + 0.5) * CELL, CELL * (0.39 + Math.sin(time / 95) * 0.04), 0, Math.PI * 2)
+    context.arc((scene.bonus.x + 0.5) * CELL, (scene.bonus.y + 0.5) * CELL, CELL * 0.36 * pulse, 0, Math.PI * 2)
+    context.fill()
     context.stroke()
     context.globalAlpha = 1
   }
   context.restore()
 
   for (let index = scene.snake.length - 1; index >= 0; index -= 1) {
-    const part = scene.snake[index]
+    const current = scene.snake[index]
+    const previous = scene.previousSnake[index] ?? current
+    const part = { x: previous.x + (current.x - previous.x) * progress, y: previous.y + (current.y - previous.y) * progress }
     const inset = index === 0 ? 2 : 3 + Math.min(5, index * 0.04)
     context.fillStyle = index === 0 ? '#bcffd0' : `hsl(${145 + Math.min(25, index * 0.25)} 75% ${Math.max(43, 60 - index * 0.12)}%)`
     context.beginPath()
@@ -67,7 +79,7 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
     context.fill()
   }
 
-  const head = scene.snake[0]
+  const head = { x: scene.previousSnake[0].x + (scene.snake[0].x - scene.previousSnake[0].x) * progress, y: scene.previousSnake[0].y + (scene.snake[0].y - scene.previousSnake[0].y) * progress }
   const eyeX = head.x * CELL + CELL / 2 + scene.direction.x * 5
   const eyeY = head.y * CELL + CELL / 2 + scene.direction.y * 5
   context.fillStyle = '#123c35'
@@ -75,6 +87,18 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   context.arc(eyeX - scene.direction.y * 4, eyeY + scene.direction.x * 4, 2, 0, Math.PI * 2)
   context.arc(eyeX + scene.direction.y * 4, eyeY - scene.direction.x * 4, 2, 0, Math.PI * 2)
   context.fill()
+  const actualHead = scene.snake[0]
+  if (actualHead.x < 2 || actualHead.y < 2 || actualHead.x > CELLS - 3 || actualHead.y > CELLS - 3) {
+    context.strokeStyle = 'rgba(255,109,129,.65)'
+    context.lineWidth = 4
+    context.strokeRect(2, 2, SIZE - 4, SIZE - 4)
+  }
+  if (scene.flash > 0) {
+    context.fillStyle = '#fff0b7'
+    context.font = '800 22px system-ui, sans-serif'
+    context.textAlign = 'center'
+    context.fillText(scene.message, SIZE / 2, 34)
+  }
 }
 
 function readRecords() {
@@ -94,16 +118,17 @@ function readNickname(fallback: string) {
 export function Game({ locale }: GameProps) {
   const copy = locale === 'pl' ? {
     label: 'ARCADE · BEZ KOŃCA', title: 'Łap rytm. Zgarniaj punkty.', score: 'WYNIK', best: 'REKORD', length: 'DŁUGOŚĆ', combo: 'SERIA', boost: 'DOPALACZ', history: 'NAJLEPSZE WYNIKI', pause: 'Pauza', nickname: 'PSEUDONIM', save: 'Zapisz wynik', empty: 'Zagraj i zapisz pierwszy wynik.', local: 'ZAPISANO NA TYM URZĄDZENIU',
-    ready: 'Zaczynamy?', readyText: 'Zbieraj owoce, utrzymuj serię i przytrzymaj spację, by przyspieszyć. Złoty owoc znika po chwili.', over: 'Koniec gry', paused: 'Gra wstrzymana',
+    ready: 'Zaczynamy?', readyText: 'Zbieraj owoce i planuj zakręty. Spacja przyspiesza i podwaja punkty. Złote owoce to dodatkowe cele na 8 sekund.', over: 'Koniec gry', paused: 'Gra wstrzymana',
     start: 'Start', again: 'Jeszcze raz', resume: 'Wznów', controls: 'RUCH', touch: 'DOTKNIJ KIERUNKU', dash: '⚡ DOPALACZ',
   } : {
     label: 'ARCADE · ENDLESS', title: 'Find the rhythm. Chase the score.', score: 'SCORE', best: 'BEST', length: 'LENGTH', combo: 'STREAK', boost: 'BOOST', history: 'HIGH SCORES', pause: 'Pause', nickname: 'NICKNAME', save: 'Save score', empty: 'Play a round and save your first score.', local: 'SAVED ON THIS DEVICE',
-    ready: 'Ready to grow?', readyText: 'Collect fruit to build a streak and charge your boost. Hold Space to speed up. Golden fruit vanishes quickly.', over: 'Run over', paused: 'Game paused',
+    ready: 'Ready to grow?', readyText: 'Queue your turns and chain fruit. Hold Space for speed and double points. Golden fruit is an optional 8-second detour.', over: 'Run over', paused: 'Game paused',
     start: 'Start run', again: 'Play again', resume: 'Resume', controls: 'MOVE', touch: 'TAP A DIRECTION', dash: '⚡ BOOST',
   }
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const sceneRef = useRef<Scene>(createScene())
-  const directionRef = useRef<Direction | null>(null)
+  const [initialScene] = useState(createScene)
+  const sceneRef = useRef(initialScene)
+  const directionRef = useRef<Direction[]>([])
   const boostRef = useRef(false)
   const fallbackName = locale === 'pl' ? 'Gracz' : 'Player'
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready')
@@ -111,6 +136,9 @@ export function Game({ locale }: GameProps) {
   const [nickname, setNickname] = useState(fallbackName)
   const [records, setRecords] = useState<ScoreEntry[]>([])
   const [saved, setSaved] = useState(false)
+  const [runBest, setRunBest] = useState(0)
+  useEffect(() => { if (status === 'over') saveScore() }, [status])
+  useGameSession(status, setStatus, start)
   const [combo, setCombo] = useState(0)
   const [boostFuel, setBoostFuel] = useState(35)
   const best = records[0]?.score ?? 0
@@ -134,9 +162,7 @@ export function Game({ locale }: GameProps) {
     let previousTime = 0
     let stepTimer = 0
     function turn(x: number, y: number) {
-      const proposed = directionRef.current ?? scene.direction
-      if ((x === -proposed.x && y === -proposed.y) || (x === -scene.direction.x && y === -scene.direction.y)) return
-      directionRef.current = { x, y }
+      queueTurn(directionRef.current, scene.direction, { x, y })
     }
     function keyDown(event: KeyboardEvent) {
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select')) return
@@ -147,7 +173,6 @@ export function Game({ locale }: GameProps) {
       if (key === 'arrowleft' || key === 'a') turn(-1, 0)
       if (key === 'arrowright' || key === 'd') turn(1, 0)
       if (key === ' ' || key === 'shift') boostRef.current = true
-      if (event.key === 'Escape') setStatus('paused')
     }
     function keyUp(event: KeyboardEvent) {
       if (event.code === 'Space' || event.key === 'Shift') boostRef.current = false
@@ -162,15 +187,16 @@ export function Game({ locale }: GameProps) {
       const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
       previousTime = time
       scene.elapsed += delta
+      scene.flash = Math.max(0, scene.flash - delta)
       scene.comboTimer = Math.max(0, scene.comboTimer - delta)
       if (scene.comboTimer === 0) {
         scene.combo = 0
         setCombo(0)
       }
-      if (scene.food.golden) {
+      if (scene.bonus) {
         scene.goldenTimer -= delta
         if (scene.goldenTimer <= 0) {
-          scene.food = randomFood(scene.snake, false)
+          scene.bonus = null
           scene.goldenTimer = 0
         }
       }
@@ -178,36 +204,49 @@ export function Game({ locale }: GameProps) {
       scene.boostFuel = Math.max(0, Math.min(100, scene.boostFuel + (boosting ? -42 : 8) * delta))
       setBoostFuel(Math.round(scene.boostFuel))
       stepTimer += delta
-      const step = Math.max(0.085, 0.145 - scene.score * 0.00028) * (boosting ? 0.62 : 1)
+      const step = Math.max(0.09, 0.15 - scene.eaten * 0.0012) * (boosting ? 0.65 : 1)
       while (stepTimer >= step) {
         stepTimer -= step
-        scene.direction = directionRef.current ?? scene.direction
-        const head = { x: scene.snake[0].x + scene.direction.x, y: scene.snake[0].y + scene.direction.y }
-        const eats = head.x === scene.food.x && head.y === scene.food.y
-        const bodyToCheck = eats ? scene.snake : scene.snake.slice(0, -1)
-        if (head.x < 0 || head.y < 0 || head.x >= CELLS || head.y >= CELLS || bodyToCheck.some((part) => part.x === head.x && part.y === head.y)) {
+        scene.direction = directionRef.current.shift() ?? scene.direction
+        const nextHead = { x: scene.snake[0].x + scene.direction.x, y: scene.snake[0].y + scene.direction.y }
+        const eats = nextHead.x === scene.food.x && nextHead.y === scene.food.y
+        const eatsBonus = scene.bonus !== null && nextHead.x === scene.bonus.x && nextHead.y === scene.bonus.y
+        const { head, crashed } = snakeStep(scene.snake, scene.direction, eats || eatsBonus, CELLS)
+        if (crashed) {
           finish()
           renderScene(drawingContext, scene, time)
           return
         }
+        scene.previousSnake = scene.snake.map((part) => ({ ...part }))
         scene.snake.unshift(head)
-        if (eats) {
+        if (eats || eatsBonus) {
           scene.combo = scene.comboTimer > 0 ? Math.min(8, scene.combo + 1) : 1
-          scene.comboTimer = 3.2
-          scene.score += (scene.food.golden ? 50 : 10) * scene.combo
-          scene.boostFuel = Math.min(100, scene.boostFuel + (scene.food.golden ? 35 : 18))
+          const earned = fruitScore(scene.combo, eatsBonus, boosting)
+          scene.score += earned
+          scene.flash = 0.65
+          scene.message = `+${earned}${boosting ? '  ⚡ ×2' : ''}`
+          scene.boostFuel = Math.min(100, scene.boostFuel + (eatsBonus ? 35 : 18))
           setCombo(scene.combo)
           setBoostFuel(Math.round(scene.boostFuel))
-          scene.eaten += 1
-          const golden = scene.eaten % 4 === 0 || Math.random() < 0.15
-          scene.food = randomFood(scene.snake, golden)
-          scene.goldenTimer = golden ? 5.5 : 0
+          if (eatsBonus) {
+            scene.bonus = null
+            scene.goldenTimer = 0
+          } else {
+            scene.eaten += 1
+            scene.food = randomFood([...scene.snake, ...(scene.bonus ? [scene.bonus] : [])], false)
+            if (scene.eaten % 4 === 0 && !scene.bonus) {
+              scene.bonus = randomFood([...scene.snake, scene.food], true)
+              scene.goldenTimer = 8
+            }
+          }
+          const travel = Math.abs(scene.food.x - head.x) + Math.abs(scene.food.y - head.y)
+          scene.comboTimer = Math.max(4, travel * step + 2.5)
           setScore(scene.score)
         } else {
           scene.snake.pop()
         }
       }
-      renderScene(drawingContext, scene, time)
+      renderScene(drawingContext, scene, time, Math.min(1, stepTimer / step))
       animationFrame = requestAnimationFrame(frame)
     }
 
@@ -223,8 +262,9 @@ export function Game({ locale }: GameProps) {
   }, [status])
 
   function start() {
+    setRunBest(records[0]?.score ?? 0)
     sceneRef.current = createScene()
-    directionRef.current = null
+    directionRef.current = []
     boostRef.current = false
     setScore(0)
     setCombo(0)
@@ -249,9 +289,7 @@ export function Game({ locale }: GameProps) {
 
   function holdDirection(x: number, y: number) {
     const scene = sceneRef.current
-    const current = directionRef.current ?? scene.direction
-    if ((x === -current.x && y === -current.y) || (x === -scene.direction.x && y === -scene.direction.y)) return
-    directionRef.current = { x, y }
+    queueTurn(directionRef.current, scene.direction, { x, y })
   }
 
   return (
@@ -261,7 +299,7 @@ export function Game({ locale }: GameProps) {
         {status === 'playing' && <div className="arcade-livebar"><span>{copy.controls} · {copy.combo} ×{combo || 1}</span><div className="arcade-live-actions"><label className="boost-meter"><span>{copy.boost}</span><span className="boost-meter-track"><i style={{ width: `${boostFuel}%` }} /></span></label><button onClick={() => setStatus('paused')}>Ⅱ {copy.pause}</button></div></div>}
         <div className="canvas-wrap arcade-canvas-wrap snake-canvas-wrap">
           <canvas ref={canvasRef} width={SIZE} height={SIZE} aria-label={locale === 'pl' ? 'Plansza Neon Snake' : 'Neon Snake board'} />
-          {status !== 'playing' && <div className="game-overlay"><span className="overlay-spark">{status === 'over' ? '✦' : '◉'}</span><strong>{status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready}</strong><span>{status === 'over' ? `${copy.score}: ${score}` : copy.readyText}</span>{status === 'over' && score > 0 && !saved && <button className="game-button game-button-soft" onClick={saveScore}>{copy.save}</button>}<button className="game-button" onClick={status === 'paused' ? () => setStatus('playing') : start}>{status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start}<span>→</span></button></div>}
+          <GameOverlay status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Zaplanuj dwa zakręty z wyprzedzeniem. Dopalacz podwaja punkty z owoców.' : 'Queue two turns ahead. Boosted fruit is worth double.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.length, value: sceneRef.current.snake.length }, { label: locale === 'pl' ? 'OWOCE' : 'FRUIT', value: sceneRef.current.eaten }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }] }} />
         </div>
         <div className="game-touch-controls snake-touch-controls"><button aria-label={locale === 'pl' ? 'W górę' : 'Up'} onPointerDown={() => holdDirection(0, -1)}>↑</button><div><button aria-label={locale === 'pl' ? 'W lewo' : 'Left'} onPointerDown={() => holdDirection(-1, 0)}>←</button><span>{copy.touch}</span><button aria-label={locale === 'pl' ? 'W prawo' : 'Right'} onPointerDown={() => holdDirection(1, 0)}>→</button></div><button aria-label={locale === 'pl' ? 'W dół' : 'Down'} onPointerDown={() => holdDirection(0, 1)}>↓</button><button className="snake-boost-button" onPointerDown={() => { boostRef.current = true }} onPointerUp={() => { boostRef.current = false }} onPointerCancel={() => { boostRef.current = false }} onPointerLeave={() => { boostRef.current = false }} aria-label={copy.dash}>⚡</button></div>
         <p className="arcade-controls-note"><span>{copy.controls}</span> <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <span>· {copy.dash} <kbd>SPACE</kbd></span></p>

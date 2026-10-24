@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
+import { useGameSession } from '../kit/use-game-session.ts'
+import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { createBricks, paddleReturn } from './mechanics.ts'
 
 type Brick = { x: number; y: number; color: string; hits: number; alive: boolean }
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; duration: number; color: string }
 type BoostType = 'wide' | 'slow' | 'fire'
 type BoostDrop = { x: number; y: number; vy: number; type: BoostType }
-type Scene = { ballX: number; ballY: number; ballVX: number; ballVY: number; ballSpeed: number; paddleX: number; paddleWidth: number; paddleBaseWidth: number; bricks: Brick[]; wave: number; lives: number; combo: number; paddleFlash: number; particles: Particle[]; drops: BoostDrop[]; boost: BoostType | null; boostTimer: number }
+type Scene = { serveTimer: number; pointerX: number | null; ballX: number; ballY: number; ballVX: number; ballVY: number; ballSpeed: number; paddleX: number; paddleWidth: number; paddleBaseWidth: number; bricks: Brick[]; wave: number; lives: number; combo: number; paddleFlash: number; particles: Particle[]; drops: BoostDrop[]; boost: BoostType | null; boostTimer: number }
 type ScoreEntry = { name: string; score: number }
 
 const WIDTH = 800
@@ -13,8 +16,6 @@ const HEIGHT = 440
 const PADDLE_HEIGHT = 13
 const BRICK_WIDTH = 62
 const BRICK_HEIGHT = 19
-const BRICK_GAP = 8
-const BRICK_COLORS = ['#f0785d', '#f3a34a', '#c8d867', '#75b8ad', '#718be5']
 const START_LIVES = 3
 const MIN_PADDLE_WIDTH = 72
 const WIDE_FACTOR = 1.65
@@ -22,29 +23,15 @@ const SLOW_FACTOR = 0.78
 const BOOST_DURATION = 8
 const DROP_CHANCE = 0.2
 
-function createBricks(wave: number) {
-  const rowCount = Math.min(7, 5 + Math.floor((wave - 1) / 3))
-  return Array.from({ length: rowCount * 10 }, (_, index) => {
-    const row = Math.floor(index / 10)
-    const column = index % 10
-    const hits = 1 + Math.min(3, Math.floor((wave - 1) / 3)) + (wave > 2 && row % 3 === 0 ? 1 : 0)
-    return {
-      x: 54 + column * (BRICK_WIDTH + BRICK_GAP),
-      y: 46 + row * (BRICK_HEIGHT + 9),
-      color: BRICK_COLORS[row % BRICK_COLORS.length],
-      hits,
-      alive: true,
-    }
-  })
-}
-
 function createScene(): Scene {
   const wave = 1
-  const paddleBaseWidth = 84
+  const paddleBaseWidth = 104
   const paddleWidth = paddleBaseWidth
   const ballSpeed = 350
 
   return {
+    serveTimer: 1.1,
+    pointerX: null,
     ballX: WIDTH / 2,
     ballY: HEIGHT - 76,
     ballVX: ballSpeed * 0.61,
@@ -191,6 +178,16 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, boostLabel
     context.fillRect(42, HEIGHT - 43, 130 * Math.max(0, scene.boostTimer / BOOST_DURATION), 3)
   }
 
+  if (scene.serveTimer > 0) {
+    context.strokeStyle = 'rgba(239,116,91,.6)'
+    context.setLineDash([4, 5])
+    context.beginPath()
+    context.moveTo(scene.ballX, scene.ballY)
+    context.lineTo(scene.ballX + scene.ballVX * 0.16, scene.ballY + scene.ballVY * 0.16)
+    context.stroke()
+    context.setLineDash([])
+  }
+
   if (scene.combo >= 2) {
     const multiplier = Math.min(5, 1 + Math.floor((scene.combo - 1) / 3))
     context.fillStyle = '#55574d'
@@ -214,7 +211,7 @@ function readRecords() {
     if (!Array.isArray(parsed)) return []
     return parsed.filter((record): record is ScoreEntry => {
       return typeof record === 'object' && record !== null && 'name' in record && typeof record.name === 'string' && 'score' in record && typeof record.score === 'number'
-    }).slice(0, 5)
+    }).sort((first, second) => second.score - first.score).slice(0, 5)
   } catch {
     return []
   }
@@ -223,16 +220,17 @@ function readRecords() {
 export function Game({ locale }: GameProps) {
   const copy = locale === 'pl' ? {
     headline: 'Jak długo dasz radę?', mode: 'TRYB BEZ KOŃCA', score: 'WYNIK', wave: 'FALA', lives: 'ŻYCIA', ready: 'Gotowy na pierwszą falę?', paused: 'Gra wstrzymana', over: 'Koniec gry',
-    goal: 'Utrzymuj piłkę w grze. Co trzy trafienia rośnie mnożnik; kolejne fale przyspieszają.', boostHelp: 'Złap spadające bonusy: szersza pałka, wolniejsza piłka lub ognista kula.', boostLabels: { wide: 'SZERSZA PAŁKA', slow: 'WOLNIEJSZA PIŁKA', fire: 'OGNISTA KULA' }, streak: 'SERIA TRAFIEŃ', combo: 'SERIA', resume: 'Wznów grę', again: 'Zagraj ponownie', start: 'Zacznij grę', save: 'Zapisz wynik',
+    goal: 'Krawędzie pałki zmieniają kąt odbicia. Rozbijaj cegły seriami; kolejne fale mają nowe układy i szybszą piłkę.', boostHelp: 'Złap spadające bonusy: szersza pałka, wolniejsza piłka lub ognista kula.', boostLabels: { wide: 'SZERSZA PAŁKA', slow: 'WOLNIEJSZA PIŁKA', fire: 'OGNISTA KULA' }, streak: 'SERIA TRAFIEŃ', combo: 'SERIA', resume: 'Wznów grę', again: 'Zagraj ponownie', start: 'Zacznij grę', save: 'Zapisz wynik',
     highScores: 'NAJLEPSZE WYNIKI', nickname: 'PSEUDONIM', empty: 'Zagraj i zapisz pierwszy wynik.', local: 'ZAPISANO NA TYM URZĄDZENIU', move: 'STERUJ PAŁKĄ', left: 'Przesuń pałkę w lewo', right: 'Przesuń pałkę w prawo',
   } : {
     headline: 'How long can you last?', mode: 'ENDLESS MODE', score: 'SCORE', wave: 'WAVE', lives: 'LIVES', ready: 'Ready for the first wave?', paused: 'Game paused', over: 'Run over',
-    goal: 'Keep the ball alive. Every three hits raises your multiplier; each wave gets faster.', boostHelp: 'Catch falling boosts: a wider paddle, slower ball, or fireball.', boostLabels: { wide: 'WIDE PADDLE', slow: 'SLOW BALL', fire: 'FIREBALL' }, streak: 'HIT STREAK', combo: 'STREAK', resume: 'Resume game', again: 'Play again', start: 'Start endless run', save: 'Save score',
+    goal: 'Steer with the paddle edges. Chain bricks for multipliers; new layouts and faster returns follow each clear.', boostHelp: 'Catch falling boosts: a wider paddle, slower ball, or fireball.', boostLabels: { wide: 'WIDE PADDLE', slow: 'SLOW BALL', fire: 'FIREBALL' }, streak: 'HIT STREAK', combo: 'STREAK', resume: 'Resume game', again: 'Play again', start: 'Start endless run', save: 'Save score',
     highScores: 'HIGH SCORES', nickname: 'NICKNAME', empty: 'Play a round and save your first score.', local: 'SAVED ON THIS DEVICE', move: 'MOVE PADDLE', left: 'Move paddle left', right: 'Move paddle right',
   }
   const fallbackName = locale === 'pl' ? 'Gracz' : 'Player'
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const sceneRef = useRef<Scene>(createScene())
+  const [initialScene] = useState(createScene)
+  const sceneRef = useRef(initialScene)
   const keysRef = useRef({ left: false, right: false })
   const scoreRef = useRef(0)
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready')
@@ -243,6 +241,9 @@ export function Game({ locale }: GameProps) {
   const [nickname, setNickname] = useState(fallbackName)
   const [records, setRecords] = useState<ScoreEntry[]>([])
   const [saved, setSaved] = useState(false)
+  const [runBest, setRunBest] = useState(0)
+  useEffect(() => { if (status === 'over') saveScore() }, [status])
+  useGameSession(status, setStatus, startGame)
 
   useEffect(() => {
     setNickname(readNickname(fallbackName))
@@ -267,9 +268,8 @@ export function Game({ locale }: GameProps) {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select')) return
       if (['ArrowLeft', 'ArrowRight', 'a', 'A', 'd', 'D'].includes(event.key)) event.preventDefault()
-      if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') keysRef.current.left = true
-      if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') keysRef.current.right = true
-      if (event.key === 'Escape') setStatus('paused')
+      if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') { keysRef.current.left = true; scene.pointerX = null }
+      if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') { keysRef.current.right = true; scene.pointerX = null }
     }
 
     function handleKeyUp(event: KeyboardEvent) {
@@ -280,7 +280,9 @@ export function Game({ locale }: GameProps) {
     function frame(time: number) {
       const delta = Math.min((time - (previousTime || time)) / 1000, 0.034)
       previousTime = time
-      const speed = 590
+      const previousPaddleX = scene.paddleX
+      const speed = 640
+      if (scene.pointerX !== null) scene.paddleX = scene.pointerX - scene.paddleWidth / 2
       if (keysRef.current.left) scene.paddleX -= speed * delta
       if (keysRef.current.right) scene.paddleX += speed * delta
       scene.paddleX = Math.max(38, Math.min(WIDTH - 38 - scene.paddleWidth, scene.paddleX))
@@ -317,6 +319,14 @@ export function Game({ locale }: GameProps) {
         }
       }
 
+      if (scene.serveTimer > 0) {
+        scene.serveTimer = Math.max(0, scene.serveTimer - delta)
+        scene.ballX = scene.paddleX + scene.paddleWidth / 2
+        scene.ballY = HEIGHT - 55
+        renderScene(drawingContext, scene, copy.boostLabels, copy.streak)
+        animationFrame = requestAnimationFrame(frame)
+        return
+      }
       const previousBallX = scene.ballX
       const previousBallY = scene.ballY
       scene.ballX += scene.ballVX * delta
@@ -342,9 +352,14 @@ export function Game({ locale }: GameProps) {
         scene.ballX <= scene.paddleX + scene.paddleWidth + 7
       ) {
         const hitOffset = Math.max(-0.84, Math.min(0.84, (scene.ballX - (scene.paddleX + scene.paddleWidth / 2)) / (scene.paddleWidth / 2)))
-        const ballSpeed = Math.hypot(scene.ballVX, scene.ballVY)
-        scene.ballVX = hitOffset * ballSpeed
-        scene.ballVY = -Math.sqrt(ballSpeed ** 2 - scene.ballVX ** 2)
+        scene.ballSpeed = Math.min(650, scene.ballSpeed * 1.008)
+        const speed = scene.ballSpeed * (scene.boost === 'slow' ? SLOW_FACTOR : 1)
+        const movement = Math.max(-1, Math.min(1, (scene.paddleX - previousPaddleX) / Math.max(1, 640 * delta)))
+        const rebound = paddleReturn(hitOffset, speed, movement)
+        scene.ballVX = Math.abs(rebound.vx) < speed * 0.12 ? Math.sign(rebound.vx || scene.ballVX || 1) * speed * 0.12 : rebound.vx
+        scene.ballVY = -Math.sqrt(speed ** 2 - scene.ballVX ** 2)
+        scene.combo = 0
+        setCombo(0)
         scene.ballY = paddleY - 8
         scene.paddleFlash = 0.12
         addBurst(scene, scene.ballX, scene.ballY + 7, '#fffdf0', 5)
@@ -390,6 +405,9 @@ export function Game({ locale }: GameProps) {
           setStatus('over')
           return
         }
+        scene.serveTimer = 0.95
+        scene.drops = []
+        clearBoost(scene)
         scene.ballX = WIDTH / 2
         scene.ballY = HEIGHT - 76
         const speed = scene.ballSpeed * (scene.boost === 'slow' ? SLOW_FACTOR : 1)
@@ -400,7 +418,13 @@ export function Game({ locale }: GameProps) {
 
       if (scene.bricks.every((brick) => !brick.alive)) {
         scene.wave += 1
-        scene.ballSpeed = Math.min(660, scene.ballSpeed * 1.075)
+        scene.serveTimer = 1.25
+        scene.drops = []
+        if (scene.wave % 3 === 0) {
+          scene.lives = Math.min(5, scene.lives + 1)
+          setLives(scene.lives)
+        }
+        scene.ballSpeed = Math.min(650, 350 + (scene.wave - 1) * 24)
         scene.paddleBaseWidth = Math.max(MIN_PADDLE_WIDTH, scene.paddleBaseWidth - 3)
         resizePaddle(scene, scene.paddleBaseWidth * (scene.boost === 'wide' ? WIDE_FACTOR : 1))
         scene.bricks = createBricks(scene.wave)
@@ -434,6 +458,7 @@ export function Game({ locale }: GameProps) {
   }, [status, locale])
 
   function startGame() {
+    setRunBest(records[0]?.score ?? 0)
     scoreRef.current = 0
     setScore(0)
     setWave(1)
@@ -449,18 +474,21 @@ export function Game({ locale }: GameProps) {
     const next = [...records, { name: nickname.trim() || fallbackName, score }]
       .sort((first, second) => second.score - first.score)
       .slice(0, 5)
-    localStorage.setItem('playcove.brick-breaker.nickname', nickname.trim() || fallbackName)
-    localStorage.setItem('playcove.brick-breaker.scores', JSON.stringify(next))
+    try {
+      localStorage.setItem('playcove.brick-breaker.nickname', nickname.trim() || fallbackName)
+      localStorage.setItem('playcove.brick-breaker.scores', JSON.stringify(next))
+    } catch { return }
     setRecords(next)
     setSaved(true)
   }
 
   function hold(direction: 'left' | 'right', pressed: boolean) {
     keysRef.current[direction] = pressed
+    if (pressed) sceneRef.current.pointerX = null
   }
 
   return (
-    <div className="module-game brick-game">
+    <div className={`module-game brick-game${status === 'playing' ? ' is-playing' : ''}`}>
       <div className="module-game-main">
         <div className="module-game-heading">
           <div><span className="game-small-label">{copy.mode}</span><h2>{copy.headline}</h2></div>
@@ -471,17 +499,10 @@ export function Game({ locale }: GameProps) {
             <div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div>
           </div>
         </div>
+        <div className="arcade-livebar"><span>{locale === 'pl' ? 'KRAWĘDŹ PAŁKI ZMIENIA KĄT · CO 3 FALE +1 ŻYCIE' : 'PADDLE EDGES STEER · EVERY 3 WAVES +1 LIFE'}</span>{status === 'playing' && <button onClick={() => setStatus('paused')}>Ⅱ {locale === 'pl' ? 'Pauza' : 'Pause'}</button>}</div>
         <div className="canvas-wrap">
-          <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="Brick Breaker play field" />
-          {status !== 'playing' && (
-            <div className="game-overlay">
-              <span className="overlay-spark">{status === 'over' ? '✦' : '✳'}</span>
-              <strong>{status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready}</strong>
-              <span>{status === 'over' ? `${copy.score}: ${score}` : copy.goal}</span>
-              {status === 'over' && score > 0 && !saved && <button className="game-button game-button-soft" onClick={saveScore}>{copy.save}</button>}
-              <button className="game-button" onClick={status === 'paused' ? () => setStatus('playing') : startGame}>{status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} <span>→</span></button>
-            </div>
-          )}
+          <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Plansza Brick Breaker' : 'Brick Breaker play field'} onPointerMove={(event) => { if (status !== 'playing') return; const bounds = event.currentTarget.getBoundingClientRect(); sceneRef.current.pointerX = (event.clientX - bounds.left) * WIDTH / bounds.width }} onPointerDown={(event) => { if (status !== 'playing') return; event.currentTarget.setPointerCapture(event.pointerId); const bounds = event.currentTarget.getBoundingClientRect(); sceneRef.current.pointerX = (event.clientX - bounds.left) * WIDTH / bounds.width }} />
+          <GameOverlay status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Trafienie krawędzią pałki otwiera drogę za cegły.' : 'An edge return opens a route behind the bricks.') : copy.goal} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startGame} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.wave, value: wave }, { label: locale === 'pl' ? 'POPRZEDNI REKORD' : 'PREVIOUS BEST', value: runBest }] }} />
         </div>
         <div className="game-touch-controls">
           <button aria-label={copy.left} onPointerDown={() => hold('left', true)} onPointerUp={() => hold('left', false)} onPointerCancel={() => hold('left', false)} onPointerLeave={() => hold('left', false)}>←</button>

@@ -3,7 +3,6 @@ import type { GameModule, GameProps } from './contract.ts'
 import { manifest as brickBreaker, Miniature as BrickBreakerMiniature } from './brick-breaker/index.tsx'
 import { manifest as neonSnake, Miniature as NeonSnakeMiniature } from './neon-snake/index.tsx'
 import { manifest as paddleDuel, Miniature as PaddleDuelMiniature } from './paddle-duel/index.tsx'
-import { manifest as penguinLaunch, Miniature as PenguinLaunchMiniature } from './penguin-launch/index.tsx'
 import { manifest as rooftopRunner, Miniature as RooftopRunnerMiniature } from './rooftop-runner/index.tsx'
 import { manifest as soccerDuel, Miniature as SoccerDuelMiniature } from './soccer-duel/index.tsx'
 import { manifest as starPatrol, Miniature as StarPatrolMiniature } from './star-patrol/index.tsx'
@@ -30,14 +29,6 @@ export const games: GameModule[] = [
     Miniature: PaddleDuelMiniature,
     loadGame: async () => {
       const module = await import('./paddle-duel/Game.tsx')
-      return { default: module.Game }
-    },
-  },
-  {
-    manifest: penguinLaunch,
-    Miniature: PenguinLaunchMiniature,
-    loadGame: async () => {
-      const module = await import('./penguin-launch/Game.tsx')
       return { default: module.Game }
     },
   },
