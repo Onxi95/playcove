@@ -3,17 +3,17 @@ import type { GameManifest } from '../contract.ts'
 export const manifest = {
   en: {
     slug: 'brick-breaker', name: 'Brick Breaker', description: 'Clear endless waves, chain hit streaks, and catch boosts as the ball speeds up.',
-    genreSlug: 'arcade', players: '1 player', playTime: 'Endless', accent: 'coral', controls: 'Move with ← → or A / D. Steer the ball with the paddle edge and catch falling boosts.',
+    genreSlug: 'arcade', players: '1 player', playTime: '15+ min', accent: 'coral', controls: 'Move with ← → or A / D. Steer the ball with the paddle edge and catch falling boosts.',
   },
   pl: {
     slug: 'brick-breaker', name: 'Brick Breaker', description: 'Czyść kolejne fale, buduj serię trafień i łap bonusy, gdy piłka przyspiesza.',
-    genreSlug: 'arcade', players: '1 gracz', playTime: 'Bez końca', accent: 'coral', controls: 'Poruszaj się klawiszami ← → lub A / D. Kieruj piłką krawędzią pałki i łap spadające bonusy.',
+    genreSlug: 'arcade', players: '1 gracz', playTime: '15+ min', accent: 'coral', controls: 'Poruszaj się klawiszami ← → lub A / D. Kieruj piłką krawędzią pałki i łap spadające bonusy.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 
 export function Miniature() {
   return (
-    <svg viewBox="0 0 400 260" role="img" aria-label="Brick wall and bouncing ball">
+    <svg preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 260" role="img" aria-label="Brick wall and bouncing ball">
       <defs>
         <linearGradient id="breaker-bg" x1="0" y1="0" x2="1" y2="1">
           <stop stopColor="#ff9c72" />

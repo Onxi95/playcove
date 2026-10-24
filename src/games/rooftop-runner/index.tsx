@@ -3,17 +3,17 @@ import type { GameManifest } from '../contract.ts'
 export const manifest = {
   en: {
     slug: 'rooftop-runner', name: 'Rooftop Runner', description: 'Leap over rooftop clutter, slide under signs, and snatch coins on a growing sprint.',
-    genreSlug: 'arcade', players: '1 player', playTime: 'Endless', accent: 'coral', controls: 'Jump with Space / ↑ / W. Hold ↓ / S to slide. Collect coins to charge a dash; use Shift / X to smash through hazards. Find magnets and shields.',
+    genreSlug: 'arcade', players: '1 player', playTime: '15+ min', accent: 'coral', controls: 'Jump with Space / ↑ / W. Hold ↓ / S to slide. Collect coins to charge a dash; use Shift / X to smash through hazards. Find magnets and shields.',
   },
   pl: {
     slug: 'rooftop-runner', name: 'Rooftop Runner', description: 'Przeskakuj przeszkody, ślizgaj się pod znakami i zbieraj monety podczas biegu.',
-    genreSlug: 'arcade', players: '1 gracz', playTime: 'Bez końca', accent: 'coral', controls: 'Skacz spacją / ↑ / W. Przytrzymaj ↓ / S, aby się ślizgać. Zbieraj monety, aby ładować dopalacz; użyj Shift / X, by przebijać się przez przeszkody. Łap magnesy i tarcze.',
+    genreSlug: 'arcade', players: '1 gracz', playTime: '15+ min', accent: 'coral', controls: 'Skacz spacją / ↑ / W. Przytrzymaj ↓ / S, aby się ślizgać. Zbieraj monety, aby ładować dopalacz; użyj Shift / X, by przebijać się przez przeszkody. Łap magnesy i tarcze.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 
 export function Miniature() {
   return (
-    <svg viewBox="0 0 400 260" role="img" aria-label="Runner leaping between city rooftops">
+    <svg preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 260" role="img" aria-label="Runner leaping between city rooftops">
       <defs><linearGradient id="runner-art-bg" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#ffbd76" /><stop offset="1" stopColor="#fa785f" /></linearGradient></defs>
       <rect width="400" height="260" rx="22" fill="url(#runner-art-bg)" />
       <circle cx="320" cy="54" r="35" fill="#fff0bd" />

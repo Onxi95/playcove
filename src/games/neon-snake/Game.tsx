@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
+import { useCanvasResolution } from '../kit/use-canvas-resolution.ts'
 import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { GamePanel } from '../kit/GamePanel.tsx'
+import { SoundToggle } from '../kit/SoundToggle.tsx'
+import { useGameAudio } from '../kit/use-game-audio.ts'
 
 import { fruitScore, queueTurn, snakeStep } from './mechanics.ts'
 import type { Cell } from './mechanics.ts'
 type Direction = { x: number; y: number }
 type Food = Cell & { golden: boolean }
-type Scene = { previousSnake: Cell[]; bonus: Food | null; flash: number; message: string; snake: Cell[]; direction: Direction; food: Food; score: number; eaten: number; elapsed: number; goldenTimer: number; combo: number; comboTimer: number; boostFuel: number }
+type Scene = { cleared: boolean; crash: 'wall' | 'body' | null; peakCombo: number; previousSnake: Cell[]; bonus: Food | null; flash: number; message: string; snake: Cell[]; direction: Direction; food: Food; score: number; eaten: number; elapsed: number; goldenTimer: number; combo: number; comboTimer: number; boostFuel: number }
 type ScoreEntry = { name: string; score: number }
 
 const CELLS = 24
@@ -29,7 +33,7 @@ function randomFood(snake: Cell[], golden: boolean): Food {
 
 function createScene(): Scene {
   const snake = [{ x: 9, y: 12 }, { x: 8, y: 12 }, { x: 7, y: 12 }]
-  return { previousSnake: snake.map((part) => ({ ...part })), bonus: null, flash: 0, message: '', snake, direction: { x: 1, y: 0 }, food: randomFood(snake, false), score: 0, eaten: 0, elapsed: 0, goldenTimer: 0, combo: 0, comboTimer: 0, boostFuel: 35 }
+  return { cleared: false, crash: null, peakCombo: 0, previousSnake: snake.map((part) => ({ ...part })), bonus: null, flash: 0, message: '', snake, direction: { x: 1, y: 0 }, food: randomFood(snake, false), score: 0, eaten: 0, elapsed: 0, goldenTimer: 0, combo: 0, comboTimer: 0, boostFuel: 35 }
 }
 
 function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: number, progress = 1) {
@@ -126,6 +130,7 @@ export function Game({ locale }: GameProps) {
     start: 'Start run', again: 'Play again', resume: 'Resume', controls: 'MOVE', touch: 'TAP A DIRECTION', dash: '⚡ BOOST',
   }
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRevision = useCanvasResolution(canvasRef, SIZE, SIZE)
   const [initialScene] = useState(createScene)
   const sceneRef = useRef(initialScene)
   const directionRef = useRef<Direction[]>([])
@@ -137,8 +142,9 @@ export function Game({ locale }: GameProps) {
   const [records, setRecords] = useState<ScoreEntry[]>([])
   const [saved, setSaved] = useState(false)
   const [runBest, setRunBest] = useState(0)
+  const { audio, enabled: soundEnabled, toggle: toggleSound } = useGameAudio(status, score > runBest)
   useEffect(() => { if (status === 'over') saveScore() }, [status])
-  useGameSession(status, setStatus, start)
+  useGameSession(status, setStatus, start, canvasRef)
   const [combo, setCombo] = useState(0)
   const [boostFuel, setBoostFuel] = useState(35)
   const best = records[0]?.score ?? 0
@@ -158,6 +164,7 @@ export function Game({ locale }: GameProps) {
     }
 
     const scene = sceneRef.current
+    scene.previousSnake = scene.snake.map((part) => ({ ...part }))
     let animationFrame = 0
     let previousTime = 0
     let stepTimer = 0
@@ -172,7 +179,7 @@ export function Game({ locale }: GameProps) {
       if (key === 'arrowdown' || key === 's') turn(0, 1)
       if (key === 'arrowleft' || key === 'a') turn(-1, 0)
       if (key === 'arrowright' || key === 'd') turn(1, 0)
-      if (key === ' ' || key === 'shift') boostRef.current = true
+      if ((key === ' ' || key === 'shift') && !event.repeat) boostRef.current = true
     }
     function keyUp(event: KeyboardEvent) {
       if (event.code === 'Space' || event.key === 'Shift') boostRef.current = false
@@ -202,6 +209,7 @@ export function Game({ locale }: GameProps) {
       }
       const boosting = boostRef.current && scene.boostFuel > 0
       scene.boostFuel = Math.max(0, Math.min(100, scene.boostFuel + (boosting ? -42 : 8) * delta))
+      if (scene.boostFuel === 0) boostRef.current = false
       setBoostFuel(Math.round(scene.boostFuel))
       stepTimer += delta
       const step = Math.max(0.09, 0.15 - scene.eaten * 0.0012) * (boosting ? 0.65 : 1)
@@ -213,6 +221,7 @@ export function Game({ locale }: GameProps) {
         const eatsBonus = scene.bonus !== null && nextHead.x === scene.bonus.x && nextHead.y === scene.bonus.y
         const { head, crashed } = snakeStep(scene.snake, scene.direction, eats || eatsBonus, CELLS)
         if (crashed) {
+          scene.crash = head.x < 0 || head.y < 0 || head.x >= CELLS || head.y >= CELLS ? 'wall' : 'body'
           finish()
           renderScene(drawingContext, scene, time)
           return
@@ -220,7 +229,9 @@ export function Game({ locale }: GameProps) {
         scene.previousSnake = scene.snake.map((part) => ({ ...part }))
         scene.snake.unshift(head)
         if (eats || eatsBonus) {
+          audio.play(eatsBonus ? 'boost' : 'pickup')
           scene.combo = scene.comboTimer > 0 ? Math.min(8, scene.combo + 1) : 1
+          scene.peakCombo = Math.max(scene.peakCombo, scene.combo)
           const earned = fruitScore(scene.combo, eatsBonus, boosting)
           scene.score += earned
           scene.flash = 0.65
@@ -228,6 +239,13 @@ export function Game({ locale }: GameProps) {
           scene.boostFuel = Math.min(100, scene.boostFuel + (eatsBonus ? 35 : 18))
           setCombo(scene.combo)
           setBoostFuel(Math.round(scene.boostFuel))
+          if (scene.snake.length === CELLS * CELLS) {
+            scene.cleared = true
+            setScore(scene.score)
+            finish()
+            renderScene(drawingContext, scene, time)
+            return
+          }
           if (eatsBonus) {
             scene.bonus = null
             scene.goldenTimer = 0
@@ -258,8 +276,9 @@ export function Game({ locale }: GameProps) {
       window.removeEventListener('keydown', keyDown)
       window.removeEventListener('keyup', keyUp)
       boostRef.current = false
+      directionRef.current = []
     }
-  }, [status])
+  }, [status, locale, canvasRevision])
 
   function start() {
     setRunBest(records[0]?.score ?? 0)
@@ -295,16 +314,21 @@ export function Game({ locale }: GameProps) {
   return (
     <div className={`module-game arcade-module snake-module${status === 'playing' ? ' is-playing' : ''}`}>
       <div className="module-game-main">
-        <div className="module-game-heading"><div><span className="game-small-label">{copy.label}</span><h2>{copy.title}</h2></div><div className="arcade-game-stats"><div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div><div className="score-readout"><span>{copy.best}</span><strong>{best.toString().padStart(3, '0')}</strong></div></div></div>
-        {status === 'playing' && <div className="arcade-livebar"><span>{copy.controls} · {copy.combo} ×{combo || 1}</span><div className="arcade-live-actions"><label className="boost-meter"><span>{copy.boost}</span><span className="boost-meter-track"><i style={{ width: `${boostFuel}%` }} /></span></label><button onClick={() => setStatus('paused')}>Ⅱ {copy.pause}</button></div></div>}
+
         <div className="canvas-wrap arcade-canvas-wrap snake-canvas-wrap">
-          <canvas ref={canvasRef} width={SIZE} height={SIZE} aria-label={locale === 'pl' ? 'Plansza Neon Snake' : 'Neon Snake board'} />
-          <GameOverlay status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Zaplanuj dwa zakręty z wyprzedzeniem. Dopalacz podwaja punkty z owoców.' : 'Queue two turns ahead. Boosted fruit is worth double.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.length, value: sceneRef.current.snake.length }, { label: locale === 'pl' ? 'OWOCE' : 'FRUIT', value: sceneRef.current.eaten }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }] }} />
+        <div className="module-game-heading game-frame-bar"><div><span className="game-small-label">{copy.label}</span><h2>NEON SNAKE</h2></div><div className="arcade-game-stats"><div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div><div className="score-readout"><span>{copy.best}</span><strong>{best.toString().padStart(3, '0')}</strong></div></div></div>
+          <canvas tabIndex={0} ref={canvasRef} width={SIZE} height={SIZE} aria-label={locale === 'pl' ? 'Plansza Neon Snake' : 'Neon Snake board'} />
+        {status === 'playing' && <div className="arcade-livebar"><span>{copy.controls} · {copy.combo} ×{combo || 1}</span><div className="arcade-live-actions"><label className="boost-meter"><span>{copy.boost}</span><span className="boost-meter-track"><i style={{ width: `${boostFuel}%` }} /></span></label></div></div>}
+          <SoundToggle locale={locale} enabled={soundEnabled} onToggle={toggleSound} onPause={status === 'playing' ? () => setStatus('paused') : undefined} />
+          <GamePanel locale={locale} onOpen={() => { if (status === 'playing') setStatus('paused') }}>
+      <aside className="game-scoreboard arcade-scoreboard"><div className="scoreboard-heading"><span className="game-small-label">{copy.history}</span><span className="scoreboard-star">✳</span></div><div className="arcade-record-number">{sceneRef.current.snake.length}</div><p className="scoreboard-foot">{copy.length}</p><label className="game-field"><span>{copy.nickname}</span><input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} /></label><div className="scoreboard-rule" /><div className="scoreboard-list">{records.length ? records.map((record, index) => <div className="scoreboard-row" key={`${record.name}-${record.score}-${index}`}><span className="score-rank">{String(index + 1).padStart(2, '0')}</span><span className="score-name">{record.name}</span><strong>{record.score}</strong></div>) : <p className="scoreboard-empty">{copy.empty}</p>}</div><div className="scoreboard-foot">{copy.local}</div></aside>
+          </GamePanel>
+          <GameOverlay gameName="NEON SNAKE" onRestart={start} status={status} locale={locale} title={status === 'over' ? sceneRef.current.cleared ? locale === 'pl' ? 'Cała plansza zajęta!' : 'Board cleared!' : copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (sceneRef.current.cleared ? locale === 'pl' ? 'Perfekcyjny bieg. Każde pole planszy należy do Ciebie.' : 'A perfect run. Every cell is yours.' : sceneRef.current.crash === 'body' ? locale === 'pl' ? 'Wpadłeś na ogon. Zostaw sobie drogę odwrotu, zanim wybierzesz złoty owoc.' : 'Caught your own tail. Leave an exit before chasing the gold fruit.' : locale === 'pl' ? 'Koniec planszy. Zapisz dwa zakręty z wyprzedzeniem, by zacieśnić nawrót.' : 'Reached the wall. Queue two turns to make a tight escape.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.length, value: sceneRef.current.snake.length }, { label: locale === 'pl' ? 'OWOCE' : 'FRUIT', value: sceneRef.current.eaten }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }] }} />
         </div>
         <div className="game-touch-controls snake-touch-controls"><button aria-label={locale === 'pl' ? 'W górę' : 'Up'} onPointerDown={() => holdDirection(0, -1)}>↑</button><div><button aria-label={locale === 'pl' ? 'W lewo' : 'Left'} onPointerDown={() => holdDirection(-1, 0)}>←</button><span>{copy.touch}</span><button aria-label={locale === 'pl' ? 'W prawo' : 'Right'} onPointerDown={() => holdDirection(1, 0)}>→</button></div><button aria-label={locale === 'pl' ? 'W dół' : 'Down'} onPointerDown={() => holdDirection(0, 1)}>↓</button><button className="snake-boost-button" onPointerDown={() => { boostRef.current = true }} onPointerUp={() => { boostRef.current = false }} onPointerCancel={() => { boostRef.current = false }} onPointerLeave={() => { boostRef.current = false }} aria-label={copy.dash}>⚡</button></div>
         <p className="arcade-controls-note"><span>{copy.controls}</span> <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <span>· {copy.dash} <kbd>SPACE</kbd></span></p>
       </div>
-      <aside className="game-scoreboard arcade-scoreboard"><div className="scoreboard-heading"><span className="game-small-label">{copy.history}</span><span className="scoreboard-star">✳</span></div><div className="arcade-record-number">{sceneRef.current.snake.length}</div><p className="scoreboard-foot">{copy.length}</p><label className="game-field"><span>{copy.nickname}</span><input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} /></label><div className="scoreboard-rule" /><div className="scoreboard-list">{records.length ? records.map((record, index) => <div className="scoreboard-row" key={`${record.name}-${record.score}-${index}`}><span className="score-rank">{String(index + 1).padStart(2, '0')}</span><span className="score-name">{record.name}</span><strong>{record.score}</strong></div>) : <p className="scoreboard-empty">{copy.empty}</p>}</div><div className="scoreboard-foot">{copy.local}</div></aside>
+
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useRouterState } from '@tanstack/react-router'
 import { getLocalePath, getMessages, normalizeLocale } from '../i18n'
+import { ThemeToggle } from './ThemeToggle'
 
 export function SiteHeader() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
@@ -14,16 +15,18 @@ export function SiteHeader() {
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
           <span>playcove</span>
         </a>
-        <nav className="header-nav" aria-label="Main navigation">
+        <nav className="header-nav" aria-label={locale === 'pl' ? 'Nawigacja główna' : 'Main navigation'}>
           <a href={`${getLocalePath(locale)}#games`} className="header-link">{copy.navGames}</a>
-          <a href={getLocalePath(locale, 'genres/arcade')} className="header-link">{copy.navArcade}</a>
-          <a href={getLocalePath(locale, 'genres/sports')} className="header-link">{copy.navSports}</a>
-          <a href={getLocalePath(locale, 'genres/two-player')} className="header-link">{copy.navTwoPlayer}</a>
+          <a href={getLocalePath(locale, 'genres/arcade')} aria-current={pagePath === 'genres/arcade' ? 'page' : undefined} className="header-link">{copy.navArcade}</a>
+          <a href={getLocalePath(locale, 'genres/sports')} aria-current={pagePath === 'genres/sports' ? 'page' : undefined} className="header-link">{copy.navSports}</a>
+          <a href={getLocalePath(locale, 'genres/two-player')} aria-current={pagePath === 'genres/two-player' ? 'page' : undefined} className="header-link">{copy.navTwoPlayer}</a>
         </nav>
+        <div className="header-options"><ThemeToggle locale={locale} />
         <nav className="language-switch" aria-label={copy.language}>
           <a href={getLocalePath('en', pagePath)} aria-label={copy.languageNames.en} aria-current={locale === 'en' ? 'page' : undefined}>EN</a>
           <a href={getLocalePath('pl', pagePath)} aria-label={copy.languageNames.pl} aria-current={locale === 'pl' ? 'page' : undefined}>PL</a>
         </nav>
+        </div>
       </div>
     </header>
   )

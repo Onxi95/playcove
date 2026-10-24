@@ -1,0 +1,1 @@
+export const themeBootstrap = "(()=>{try{const t=localStorage.getItem('playcove.theme');if(t==='dark'||t==='light'){document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t}}catch{}})()"

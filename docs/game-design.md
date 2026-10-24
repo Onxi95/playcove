@@ -2,6 +2,16 @@
 
 Games should be compelling enough that players want another round. Build that pull from good play: responsive controls, clear feedback, skill to master, fair challenge, and quick retries. “Addictive” means satisfying and replayable, not pressuring players to stay.
 
+## Long sessions and expansion
+
+Design each game to sustain 15–30 minutes of active play for a skilled player. Short rounds are building blocks: connect them into an endless run, campaign, cup, or local match series with a visible next objective. A three-goal football match alone does not meet this requirement.
+
+Introduce several changes across a session: new obstacle combinations, opponents with different behavior, stage layouts, environmental effects, bosses, or tactical boosts. Give players choices that change how they play. Longer health bars, arbitrary waiting, and the same opening repeated faster do not provide enough variety.
+
+Keep stage patterns, opponent profiles, boosts, and progression rules in game-owned modules or data so later additions can extend the game without changing portal architecture. Choose content that combines in interesting ways; avoid adding several versions of the same mechanic.
+
+Persist campaigns and unlocked progress on the device. Let players resume after leaving. Make the current objective, next stage, available boosts, and reason for a loss visible inside the game. Round results should lead directly to the next challenge; final results should make retrying one action, support Space/Enter, and save scores automatically.
+
 ## Every game should
 
 - Make the first move obvious and get players into play quickly.
@@ -13,9 +23,19 @@ Games should be compelling enough that players want another round. Build that pu
 - Let players stop without losing progress to a streak, countdown, or artificial scarcity.
 - Use boosts to add short tactical choices; show how to earn them and what they change.
 
-Brick Breaker drops temporary wide-paddle, slow-ball, and fireball boosts from broken bricks. Paddle Duel places boosts in the rally path; paddle movement steers returns, and sending the ball through an orb awards its boost to the last hitter. Both games show the active effect and its remaining time.
+Brick Breaker rotates wall layouts without a time limit. Paddle edges and movement steer returns. Broken bricks charge a three-second laser burst; the final four bricks refill it to prevent tedious cleanup. Wide-paddle, slow-ball, and fireball drops add tactical choices. Every third wave restores a life, up to five.
 
-Neon Snake accepts only turns that will not reverse into its body. Fruit chains build a multiplier, golden fruit expires, and a rechargeable boost trades fuel for speed. Rooftop Runner buffers early jump presses, mixes jump and slide hazards, and lets coin streaks charge a dash that smashes through an obstacle. Magnet and shield pickups change how the next section is played. Star Patrol escalates formations by wave and gives recovery tools through temporary shield and rapid-fire pickups.
+Paddle Duel plays to seven with a two-point lead. Paddle movement adds spin; passing through an orb awards its boost to the last hitter. Rally speed rises with successful returns. Match results show the longest rally and retain the local series tally for rematches.
+
+Neon Snake buffers two valid turns and interpolates movement. Golden fruit is an optional eight-second target alongside normal fruit. Boosting doubles fruit points, and the streak window accounts for travel distance. Filling the board is a win.
+
+Rooftop Runner uses authored pattern pools with an introductory, intermediate, and precision stage. Later sections combine tall stacks, paired jumps, short-hop-to-slide transitions, and roof gaps. Holding jump controls height; sliding during descent makes a fast landing. Coins and clean passes charge a short dash. Difficulty comes from readable timing choices and combinations, with bounded speed and tested landing windows.
+
+Star Patrol fires automatically so movement and positioning stay central. A charged pulse clears bullets and damages nearby divers. Waves introduce armor, telegraphed diving attacks, and bosses every fourth wave with a second attack phase. Shield and rapid-fire pickups provide recovery tools.
+
+Soccer Duel defaults to an arcade run through five opponent styles and changing arenas. Wins earn points, streak bonuses, and a cup every five victories; the run ends after three match losses. Matches target five goals, rising to seven after five wins. Save each goal and completed round locally and resume unfinished matches at kickoff. Keep quick matches and local multiplayer available. Ground contact supports dribbling; lob, low aim, and charge control shots independently of jumping. Goals require the whole ball to cross the mouth below a solid crossbar. Keep the score visible inside the pitch.
+
+Menus, nicknames, records, and setup belong inside each game's screen. Use a large play area with optional fullscreen. Canvas buffers must follow displayed dimensions and device pixel ratio while physics stays in logical coordinates. Pause on lost focus, clear held inputs, save results automatically, and support a single-action retry. Optional sound starts muted; respect reduced motion.
 
 Games are for fun and should work without an account. Do not use forced ads, paid power, or pressure loops to manufacture repeat play. Keep ads outside active play.
 
@@ -28,4 +48,8 @@ Before adding a game, check:
 3. Does practice make a noticeable difference?
 4. Is there a quick, satisfying reason to replay?
 5. Can someone leave at any point without punishment?
+6. What changes after five, fifteen, and thirty minutes of skilled play?
+7. Do short matches form a longer run or series with a meaningful next objective?
+8. Can another stage, opponent, or boost be added inside the game module?
+9. Have later stages and repeated restarts been exercised, including persistent progress and held inputs?
 

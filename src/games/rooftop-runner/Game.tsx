@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
+import { useCanvasResolution } from '../kit/use-canvas-resolution.ts'
 import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { GamePanel } from '../kit/GamePanel.tsx'
+import { SoundToggle } from '../kit/SoundToggle.tsx'
+import { useGameAudio } from '../kit/use-game-audio.ts'
 import { makeSection, runnerSpeed } from './mechanics.ts'
 import type { RunnerCoin, RunnerObstacle } from './mechanics.ts'
 
@@ -9,7 +13,7 @@ type Obstacle = RunnerObstacle
 type Coin = RunnerCoin
 type Pickup = { x: number; y: number; kind: 'magnet' | 'shield' }
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string }
-type Scene = { section: number; message: string; messageTimer: number; playerY: number; playerVY: number; grounded: boolean; jumpBuffer: number; obstacles: Obstacle[]; coins: Coin[]; pickups: Pickup[]; particles: Particle[]; elapsed: number; distance: number; coinsCollected: number; bonusScore: number; spawnTimer: number; coinTimer: number; pickupTimer: number; score: number; flash: number; dashFuel: number; dashTimer: number; shieldCharges: number; magnetTimer: number; coinStreak: number; streakTimer: number }
+type Scene = { coyoteTimer: number; cleared: number; death: 'crate' | 'stack' | 'sign' | 'gap' | null; section: number; message: string; messageTimer: number; playerY: number; playerVY: number; grounded: boolean; jumpBuffer: number; obstacles: Obstacle[]; coins: Coin[]; pickups: Pickup[]; particles: Particle[]; elapsed: number; distance: number; coinsCollected: number; bonusScore: number; spawnTimer: number; coinTimer: number; pickupTimer: number; score: number; flash: number; dashFuel: number; dashTimer: number; shieldCharges: number; magnetTimer: number; coinStreak: number; streakTimer: number }
 type ScoreEntry = { name: string; score: number }
 
 const WIDTH = 800
@@ -23,7 +27,7 @@ const SCORES_KEY = 'playcove.rooftop-runner.scores'
 const NAME_KEY = 'playcove.rooftop-runner.nickname'
 
 function createScene(): Scene {
-  return { section: 0, message: '', messageTimer: 0, playerY: GROUND - PLAYER_HEIGHT, playerVY: 0, grounded: true, jumpBuffer: 0, obstacles: [], coins: [], pickups: [], particles: [], elapsed: 0, distance: 0, coinsCollected: 0, bonusScore: 0, spawnTimer: 0.9, coinTimer: 1.4, pickupTimer: 6, score: 0, flash: 0, dashFuel: 50, dashTimer: 0, shieldCharges: 0, magnetTimer: 0, coinStreak: 0, streakTimer: 0 }
+  return { coyoteTimer: 0.1, cleared: 0, death: null, section: 0, message: '', messageTimer: 0, playerY: GROUND - PLAYER_HEIGHT, playerVY: 0, grounded: true, jumpBuffer: 0, obstacles: [], coins: [], pickups: [], particles: [], elapsed: 0, distance: 0, coinsCollected: 0, bonusScore: 0, spawnTimer: 0.9, coinTimer: 1.4, pickupTimer: 6, score: 0, flash: 0, dashFuel: 65, dashTimer: 0, shieldCharges: 0, magnetTimer: 0, coinStreak: 0, streakTimer: 0 }
 }
 
 function readRecords() {
@@ -107,10 +111,19 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   }
 
   for (const obstacle of scene.obstacles) {
-    if (obstacle.kind === 'crate') {
+    if (obstacle.kind === 'gap') {
+      context.fillStyle = '#171f35'
+      context.fillRect(obstacle.x, GROUND, obstacle.width, HEIGHT - GROUND)
+      context.fillStyle = '#e98460'
+      context.fillRect(obstacle.x - 5, GROUND, 5, 13)
+      context.fillRect(obstacle.x + obstacle.width, GROUND, 5, 13)
+      continue
+    }
+    if (obstacle.kind === 'crate' || obstacle.kind === 'stack') {
       context.fillStyle = '#e97456'
       context.beginPath()
-      context.roundRect(obstacle.x, GROUND - 38, 34, 38, 5)
+      const height = obstacle.kind === 'stack' ? 72 : 38
+      context.roundRect(obstacle.x, GROUND - height, obstacle.width, height, 5)
       context.fill()
       context.strokeStyle = '#ffbe79'
       context.lineWidth = 4
@@ -120,6 +133,14 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
       context.moveTo(obstacle.x + 27, GROUND - 31)
       context.lineTo(obstacle.x + 7, GROUND - 7)
       context.stroke()
+      if (obstacle.kind === 'stack') {
+        context.fillStyle = '#ffbe79'
+        context.fillRect(obstacle.x + 3, GROUND - 39, obstacle.width - 6, 3)
+        context.fillStyle = '#fff0b7'
+        context.font = '900 17px system-ui, sans-serif'
+        context.textAlign = 'center'
+        context.fillText('↑', obstacle.x + obstacle.width / 2, GROUND - 48)
+      }
     } else {
       context.fillStyle = '#e97456'
       context.fillRect(obstacle.x, GROUND - 78, 58, 34)
@@ -179,14 +200,15 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
 export function Game({ locale }: GameProps) {
   const copy = locale === 'pl' ? {
     label: 'ARCADE · BIEG BEZ KOŃCA', title: 'Skacz, ślizgaj się, pędź.', score: 'WYNIK', best: 'REKORD', coins: 'MONETY', streak: 'SERIA', dash: 'DOPALACZ', history: 'NAJLEPSZE WYNIKI', pause: 'Pauza', nickname: 'PSEUDONIM', save: 'Zapisz wynik', empty: 'Zagraj i zapisz pierwszy wynik.', local: 'ZAPISANO NA TYM URZĄDZENIU',
-    ready: 'Gotowy do biegu?', readyText: 'Przytrzymaj skok, by skoczyć wysoko; dotknij, by podskoczyć. Monety prowadzą nad skrzyniami i pod znakami. Shift zużywa 50% dopalacza.', over: 'Koniec biegu', paused: 'Bieg wstrzymany', magnet: 'MAGNES', shield: 'TARCZA',
+    ready: 'Gotowy do biegu?', readyText: 'Przytrzymaj skok, by skoczyć wysoko; dotknij, by podskoczyć. Monety prowadzą nad skrzyniami i pod znakami. Przytrzymaj skok nad lukami. Shift zużywa 65% dopalacza.', over: 'Koniec biegu', paused: 'Bieg wstrzymany', magnet: 'MAGNES', shield: 'TARCZA',
     start: 'Start', again: 'Jeszcze raz', resume: 'Wznów', jump: 'SKOK', slide: 'ŚLIZG',
   } : {
     label: 'ARCADE · ENDLESS RUN', title: 'Jump, slide, hit the boost.', score: 'SCORE', best: 'BEST', coins: 'COINS', streak: 'STREAK', dash: 'BOOST', history: 'HIGH SCORES', pause: 'Pause', nickname: 'NICKNAME', save: 'Save score', empty: 'Play a round and save your first score.', local: 'SAVED ON THIS DEVICE',
-    ready: 'Ready to run?', readyText: 'Hold jump for height; tap for a short hop. Follow coin trails over crates and under signs. Shift spends 50% charge to smash hazards.', over: 'Run over', paused: 'Run paused', magnet: 'MAGNET', shield: 'SHIELD',
+    ready: 'Ready to run?', readyText: 'Hold jump for height; tap for a short hop. Follow coin trails over crates and under signs. Hold jump across roof gaps. Shift spends 65% charge to smash hazards.', over: 'Run over', paused: 'Run paused', magnet: 'MAGNET', shield: 'SHIELD',
     start: 'Start run', again: 'Play again', resume: 'Resume', jump: 'JUMP', slide: 'SLIDE',
   }
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRevision = useCanvasResolution(canvasRef, WIDTH, HEIGHT)
   const [initialScene] = useState(createScene)
   const sceneRef = useRef(initialScene)
   const inputRef = useRef({ jump: false, jumpHeld: false, slide: false, dash: false })
@@ -195,14 +217,15 @@ export function Game({ locale }: GameProps) {
   const [score, setScore] = useState(0)
   const [coins, setCoins] = useState(0)
   const [streak, setStreak] = useState(0)
-  const [dashFuel, setDashFuel] = useState(50)
+  const [dashFuel, setDashFuel] = useState(65)
   const [powerState, setPowerState] = useState('')
   const [nickname, setNickname] = useState(fallbackName)
   const [records, setRecords] = useState<ScoreEntry[]>([])
   const [saved, setSaved] = useState(false)
   const [runBest, setRunBest] = useState(0)
+  const { audio, enabled: soundEnabled, toggle: toggleSound } = useGameAudio(status, score > runBest)
   useEffect(() => { if (status === 'over') saveScore() }, [status])
-  useGameSession(status, setStatus, start)
+  useGameSession(status, setStatus, start, canvasRef)
   const best = records[0]?.score ?? 0
 
   useEffect(() => {
@@ -236,7 +259,8 @@ export function Game({ locale }: GameProps) {
       if (['arrowdown', 's'].includes(key)) inputRef.current.slide = false
       if ([' ', 'arrowup', 'w'].includes(key)) inputRef.current.jumpHeld = false
     }
-    function finish() {
+    function finish(death: 'crate' | 'stack' | 'sign' | 'gap') {
+      scene.death = death;
       setScore(scene.score)
       setCoins(scene.coinsCollected)
       setStatus('over')
@@ -248,7 +272,7 @@ export function Game({ locale }: GameProps) {
       scene.flash = Math.max(0, scene.flash - delta)
       const speed = runnerSpeed(scene.elapsed) * (scene.dashTimer > 0 ? 1.28 : 1)
       scene.messageTimer = Math.max(0, scene.messageTimer - delta)
-      scene.dashFuel = Math.min(100, scene.dashFuel + delta * 2.5)
+      scene.dashFuel = Math.min(100, scene.dashFuel + delta * 1.4)
       scene.dashTimer = Math.max(0, scene.dashTimer - delta)
       scene.magnetTimer = Math.max(0, scene.magnetTimer - delta)
       scene.streakTimer = Math.max(0, scene.streakTimer - delta)
@@ -257,9 +281,10 @@ export function Game({ locale }: GameProps) {
         setStreak(0)
       }
       if (inputRef.current.dash) {
-        if (scene.dashFuel >= 50 && scene.dashTimer <= 0) {
-          scene.dashFuel -= 50
-          scene.dashTimer = 0.65
+        if (scene.dashFuel >= 65 && scene.dashTimer <= 0) {
+          audio.play('boost')
+          scene.dashFuel -= 65
+          scene.dashTimer = 0.48
           scene.flash = 0.12
           addBurst(scene, PLAYER_X, scene.playerY + PLAYER_HEIGHT / 2, '#9bf3d0')
         }
@@ -269,7 +294,11 @@ export function Game({ locale }: GameProps) {
       if (inputRef.current.jump) scene.jumpBuffer = 0.13
       inputRef.current.jump = false
       scene.jumpBuffer = Math.max(0, scene.jumpBuffer - delta)
-      if (scene.jumpBuffer > 0 && scene.grounded) {
+      const overGap = scene.obstacles.some((obstacle) => obstacle.kind === 'gap' && PLAYER_X > obstacle.x + 6 && PLAYER_X < obstacle.x + obstacle.width - 6)
+      scene.coyoteTimer = scene.grounded && !overGap ? 0.1 : Math.max(0, scene.coyoteTimer - delta)
+      if (overGap && scene.grounded) scene.grounded = false
+      if (scene.jumpBuffer > 0 && (scene.grounded || scene.coyoteTimer > 0)) {
+        scene.coyoteTimer = 0
         scene.playerVY = -650
         scene.grounded = false
         scene.jumpBuffer = 0
@@ -280,21 +309,26 @@ export function Game({ locale }: GameProps) {
         if (inputRef.current.slide && scene.playerVY > 0) scene.playerVY += GRAVITY * delta
         scene.playerY += scene.playerVY * delta
         scene.playerVY += GRAVITY * delta
-        if (scene.playerY + PLAYER_HEIGHT >= GROUND) {
+        if (scene.playerY + PLAYER_HEIGHT >= GROUND && !overGap && scene.playerVY >= 0) {
           scene.playerY = GROUND - PLAYER_HEIGHT
           scene.playerVY = 0
           scene.grounded = true
           scene.flash = 0.08
         }
       }
+      if (scene.dashTimer > 0 && overGap && scene.playerY > GROUND - PLAYER_HEIGHT - 8) {
+        scene.playerY = GROUND - PLAYER_HEIGHT - 8
+        scene.playerVY = 0
+      }
+      if (scene.playerY > HEIGHT + 25) { finish('gap'); return }
       const playerHeight = inputRef.current.slide && scene.grounded ? 29 : PLAYER_HEIGHT
       scene.distance += speed * delta * 0.05
       scene.spawnTimer -= delta
       if (scene.spawnTimer <= 0) {
-        const section = makeSection(WIDTH + 40, speed, scene.section, Math.floor(Math.random() * 3))
+        const section = makeSection(WIDTH + 40, runnerSpeed(scene.elapsed), scene.section, Math.floor(Math.random() * 4))
         scene.obstacles.push(...section.obstacles)
         scene.coins.push(...section.coins)
-        scene.spawnTimer = section.length / speed
+        scene.spawnTimer = section.length / runnerSpeed(scene.elapsed)
         scene.section += 1
       }
       scene.pickupTimer -= delta
@@ -305,15 +339,17 @@ export function Game({ locale }: GameProps) {
       for (let index = scene.obstacles.length - 1; index >= 0; index -= 1) {
         const obstacle = scene.obstacles[index]
         obstacle.x -= speed * delta
-        if (obstacle.x < -70) { scene.obstacles.splice(index, 1); continue }
-        if (!obstacle.passed && obstacle.x + (obstacle.kind === 'crate' ? 34 : 58) < PLAYER_X - PLAYER_WIDTH / 2) {
+        if (obstacle.x + obstacle.width < -20) { scene.obstacles.splice(index, 1); continue }
+        if (!obstacle.passed && obstacle.x + obstacle.width < PLAYER_X - PLAYER_WIDTH / 2) {
           obstacle.passed = true
+          scene.cleared += 1
           scene.bonusScore += 20
-          scene.dashFuel = Math.min(100, scene.dashFuel + 5)
+          scene.dashFuel = Math.min(100, scene.dashFuel + 3)
         }
-        const obstacleY = obstacle.kind === 'crate' ? GROUND - 38 : GROUND - 78
-        const obstacleWidth = obstacle.kind === 'crate' ? 34 : 58
-        const obstacleHeight = obstacle.kind === 'crate' ? 38 : 34
+        if (obstacle.kind === 'gap') continue
+        const obstacleY = obstacle.kind === 'stack' ? GROUND - 72 : obstacle.kind === 'crate' ? GROUND - 38 : GROUND - 78
+        const obstacleWidth = obstacle.width
+        const obstacleHeight = obstacle.kind === 'stack' ? 72 : obstacle.kind === 'crate' ? 38 : 34
         const playerY = scene.grounded ? GROUND - playerHeight : scene.playerY
         if (PLAYER_X + PLAYER_WIDTH / 2 - 3 > obstacle.x && PLAYER_X - PLAYER_WIDTH / 2 + 3 < obstacle.x + obstacleWidth && playerY + playerHeight > obstacleY && playerY < obstacleY + obstacleHeight) {
           if (scene.dashTimer > 0) {
@@ -328,7 +364,7 @@ export function Game({ locale }: GameProps) {
             scene.obstacles.splice(index, 1)
             setPowerState(scene.magnetTimer > 0 ? copy.magnet : '')
           } else {
-            finish()
+            finish(obstacle.kind)
             renderScene(drawingContext, scene, time, true, inputRef.current.slide)
             return
           }
@@ -348,10 +384,11 @@ export function Game({ locale }: GameProps) {
         }
         const playerY = scene.grounded ? GROUND - playerHeight : scene.playerY
         if (Math.abs(coin.x - PLAYER_X) < (scene.magnetTimer > 0 ? 30 : 26) && coin.y >= playerY - 8 && coin.y <= playerY + playerHeight + 10) {
+          audio.play('pickup')
           scene.coinsCollected += 1
           scene.coinStreak = scene.streakTimer > 0 ? scene.coinStreak + 1 : 1
           scene.streakTimer = 4.5
-          scene.dashFuel = Math.min(100, scene.dashFuel + 9)
+          scene.dashFuel = Math.min(100, scene.dashFuel + 6)
           scene.bonusScore += Math.min(5, scene.coinStreak - 1) * 5
           if (scene.dashTimer > 0) scene.bonusScore += 25
           setStreak(scene.coinStreak)
@@ -402,7 +439,7 @@ export function Game({ locale }: GameProps) {
       window.removeEventListener('keyup', keyUp)
       inputRef.current = { jump: false, jumpHeld: false, slide: false, dash: false }
     }
-  }, [status])
+  }, [status, locale, canvasRevision])
 
   function start() {
     setRunBest(records[0]?.score ?? 0)
@@ -411,7 +448,7 @@ export function Game({ locale }: GameProps) {
     setScore(0)
     setCoins(0)
     setStreak(0)
-    setDashFuel(50)
+    setDashFuel(65)
     setPowerState('')
     setSaved(false)
     setStatus('playing')
@@ -434,16 +471,21 @@ export function Game({ locale }: GameProps) {
   return (
     <div className={`module-game arcade-module runner-module${status === 'playing' ? ' is-playing' : ''}`}>
       <div className="module-game-main">
-        <div className="module-game-heading"><div><span className="game-small-label">{copy.label}</span><h2>{copy.title}</h2></div><div className="arcade-game-stats"><div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div><div className="score-readout"><span>{copy.best}</span><strong>{best.toString().padStart(3, '0')}</strong></div></div></div>
-        {status === 'playing' && <div className="arcade-livebar"><span>{copy.jump} · {copy.slide}{streak > 1 ? ` · ${copy.streak} ×${streak}` : ''}{powerState ? ` · ${powerState}` : ''}</span><div className="arcade-live-actions"><label className="boost-meter"><span>{copy.dash}</span><span className="boost-meter-track"><i style={{ width: `${dashFuel}%` }} /></span><span>{dashFuel}%</span></label><button onClick={() => setStatus('paused')}>Ⅱ {copy.pause}</button></div></div>}
+
         <div className="canvas-wrap arcade-canvas-wrap runner-canvas-wrap">
-          <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Trasa Rooftop Runner' : 'Rooftop Runner course'} />
-          <GameOverlay status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Ślad monet prowadzi przez przeszkodę. Zachowaj dopalacz na trudne miejsce.' : 'Coin trails show the route through. Save a boost for a tight spot.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.coins, value: coins }, { label: locale === 'pl' ? 'DYSTANS' : 'DISTANCE', value: `${Math.floor(sceneRef.current.distance)}m` }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }] }} />
+        <div className="module-game-heading game-frame-bar"><div><span className="game-small-label">{copy.label}</span><h2>ROOFTOP RUNNER</h2></div><div className="arcade-game-stats"><div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div><div className="score-readout"><span>{copy.best}</span><strong>{best.toString().padStart(3, '0')}</strong></div></div></div>
+          <canvas tabIndex={0} ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Trasa Rooftop Runner' : 'Rooftop Runner course'} />
+        {status === 'playing' && <div className="arcade-livebar"><span>{copy.jump} · {copy.slide}{streak > 1 ? ` · ${copy.streak} ×${streak}` : ''}{powerState ? ` · ${powerState}` : ''}</span><div className="arcade-live-actions"><label className="boost-meter"><span>{copy.dash}</span><span className="boost-meter-track"><i style={{ width: `${dashFuel}%` }} /></span><span>{dashFuel}%</span></label></div></div>}
+          <SoundToggle locale={locale} enabled={soundEnabled} onToggle={toggleSound} onPause={status === 'playing' ? () => setStatus('paused') : undefined} />
+          <GamePanel locale={locale} onOpen={() => { if (status === 'playing') setStatus('paused') }}>
+      <aside className="game-scoreboard arcade-scoreboard"><div className="scoreboard-heading"><span className="game-small-label">{copy.history}</span><span className="scoreboard-star">✳</span></div><div className="arcade-record-number">{coins.toString().padStart(2, '0')}</div><p className="scoreboard-foot">{copy.coins}</p><label className="game-field"><span>{copy.nickname}</span><input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} /></label><div className="scoreboard-rule" /><div className="scoreboard-list">{records.length ? records.map((record, index) => <div className="scoreboard-row" key={`${record.name}-${record.score}-${index}`}><span className="score-rank">{String(index + 1).padStart(2, '0')}</span><span className="score-name">{record.name}</span><strong>{record.score}</strong></div>) : <p className="scoreboard-empty">{copy.empty}</p>}</div><div className="scoreboard-foot">{copy.local}</div></aside>
+          </GamePanel>
+          <GameOverlay gameName="ROOFTOP RUNNER" onRestart={start} status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (sceneRef.current.death === 'gap' ? locale === 'pl' ? 'Upadek między dachami. Przytrzymaj skok albo użyj dopalacza nad luką.' : 'Fell between rooftops. Hold your jump, or boost across the gap.' : sceneRef.current.death === 'stack' ? locale === 'pl' ? 'Wysoka skrzynia. Przytrzymaj skok; krótki podskok jej nie minie.' : 'A tall stack. Hold your jump; a short hop will not clear it.' : sceneRef.current.death === 'sign' ? locale === 'pl' ? 'Znak zablokował drogę. Przytrzymaj dół, by prześlizgnąć się pod nim.' : 'Caught by a sign. Hold Down to slide beneath it.' : locale === 'pl' ? 'Potknięcie o skrzynię. Skocz przed śladem monet lub przebij się dopalaczem.' : 'Clipped a crate. Jump into the coin trail or boost through it.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.coins, value: coins }, { label: locale === 'pl' ? 'DYSTANS' : 'DISTANCE', value: `${Math.floor(sceneRef.current.distance)}m` }, { label: locale === 'pl' ? 'PRZESZKODY' : 'CLEARED', value: sceneRef.current.cleared }] }} />
         </div>
-        <div className="game-touch-controls runner-touch-controls"><button onPointerDown={() => { inputRef.current.jump = true; inputRef.current.jumpHeld = true }} onPointerUp={() => { inputRef.current.jumpHeld = false }} onPointerCancel={() => { inputRef.current.jumpHeld = false }} onPointerLeave={() => { inputRef.current.jumpHeld = false }} aria-label={copy.jump}>↑ {copy.jump}</button><button onPointerDown={() => { inputRef.current.slide = true }} onPointerUp={() => { inputRef.current.slide = false }} onPointerCancel={() => { inputRef.current.slide = false }} onPointerLeave={() => { inputRef.current.slide = false }} aria-label={copy.slide}>↓ {copy.slide}</button><button disabled={status !== 'playing' || dashFuel < 50} onPointerDown={() => { inputRef.current.dash = true }} aria-label={copy.dash}>⚡ {copy.dash}</button></div>
+        <div className="game-touch-controls runner-touch-controls"><button onPointerDown={() => { inputRef.current.jump = true; inputRef.current.jumpHeld = true }} onPointerUp={() => { inputRef.current.jumpHeld = false }} onPointerCancel={() => { inputRef.current.jumpHeld = false }} onPointerLeave={() => { inputRef.current.jumpHeld = false }} aria-label={copy.jump}>↑ {copy.jump}</button><button onPointerDown={() => { inputRef.current.slide = true }} onPointerUp={() => { inputRef.current.slide = false }} onPointerCancel={() => { inputRef.current.slide = false }} onPointerLeave={() => { inputRef.current.slide = false }} aria-label={copy.slide}>↓ {copy.slide}</button><button disabled={status !== 'playing' || dashFuel < 65} onPointerDown={() => { inputRef.current.dash = true }} aria-label={copy.dash}>⚡ {copy.dash}</button></div>
         <p className="arcade-controls-note"><span>{copy.jump} <kbd>SPACE</kbd> <kbd>↑</kbd> <kbd>W</kbd></span><span>{copy.slide} <kbd>↓</kbd> <kbd>S</kbd></span><span>{copy.dash} <kbd>SHIFT</kbd> <kbd>X</kbd></span></p>
       </div>
-      <aside className="game-scoreboard arcade-scoreboard"><div className="scoreboard-heading"><span className="game-small-label">{copy.history}</span><span className="scoreboard-star">✳</span></div><div className="arcade-record-number">{coins.toString().padStart(2, '0')}</div><p className="scoreboard-foot">{copy.coins}</p><label className="game-field"><span>{copy.nickname}</span><input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} /></label><div className="scoreboard-rule" /><div className="scoreboard-list">{records.length ? records.map((record, index) => <div className="scoreboard-row" key={`${record.name}-${record.score}-${index}`}><span className="score-rank">{String(index + 1).padStart(2, '0')}</span><span className="score-name">{record.name}</span><strong>{record.score}</strong></div>) : <p className="scoreboard-empty">{copy.empty}</p>}</div><div className="scoreboard-foot">{copy.local}</div></aside>
+
     </div>
   )
 }

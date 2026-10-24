@@ -9,9 +9,10 @@ import type { ReactNode } from 'react'
 import { SiteFooter } from '../components/SiteFooter'
 import { SiteHeader } from '../components/SiteHeader'
 import { normalizeLocale } from '../i18n'
+import { themeBootstrap } from '../theme'
 import '../styles.css'
-import '../game-styles.css'
 import '../design-system.css'
+import '../game-styles.css'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -24,7 +25,7 @@ export const Route = createRootRoute({
         name: 'description',
         content: 'Free arcade and sports games. Play solo or with a friend on one keyboard.',
       },
-      { name: 'theme-color', content: '#f4f6f8' },
+      { name: 'theme-color', content: '#f7f8f3' },
     ],
   }),
   component: RootComponent,
@@ -50,8 +51,8 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const locale = normalizeLocale(pathname.split('/')[1] ?? 'en')
 
   return (
-    <html lang={locale}>
-      <head><HeadContent /></head>
+    <html lang={locale} suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: themeBootstrap }} /><HeadContent /></head>
       <body>
         {children}
         <Scripts />

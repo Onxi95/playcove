@@ -2,18 +2,20 @@ import type { GameManifest } from '../contract.ts'
 
 export const manifest = {
   en: {
-    slug: 'soccer-duel', name: 'Soccer Duel', description: 'Jump, kick, and volley past a friend or a quick-footed bot.',
-    genreSlug: 'sports', players: '1–2 players', playTime: '2–5 min', accent: 'lime', controls: 'Player 1: A / D move, W jump and lob aim, S low aim, Space kick. Player 2: ← / → move, ↑ jump and lob aim, ↓ low aim, Enter kick. Wind changes the ball’s flight.',
+    slug: 'soccer-duel', name: 'Soccer Duel', description: 'Build a football arcade run through changing teams and arenas, or challenge a friend on one keyboard.',
+    localMultiplayer: true,
+    genreSlug: 'sports', players: '1–2 players', playTime: '15+ min', accent: 'lime', controls: 'Player 1: A / D move, W jump, Q lob aim, S low aim. Hold and release Space to kick. Player 2: ← / → move, ↑ jump, Shift lob aim, ↓ low aim; hold and release Enter to kick. Touch controls are inside the game.',
   },
   pl: {
-    slug: 'soccer-duel', name: 'Soccer Duel', description: 'Skacz i strzelaj obok gracza lub sprytnego bota.',
-    genreSlug: 'sports', players: '1–2 graczy', playTime: '2–5 min', accent: 'lime', controls: 'Gracz 1: A / D: ruch, W: skok i lob, S: niski strzał, spacja: strzał. Gracz 2: ← / →: ruch, ↑: skok i lob, ↓: niski strzał, Enter: strzał. Wiatr zmienia tor lotu piłki.',
+    slug: 'soccer-duel', name: 'Soccer Duel', description: 'Przejdź przez kolejne drużyny i boiska w biegu arcade albo zmierz się z drugą osobą na jednej klawiaturze.',
+    localMultiplayer: true,
+    genreSlug: 'sports', players: '1–2 graczy', playTime: '15+ min', accent: 'lime', controls: 'Gracz 1: A / D: ruch, W: skok, Q: lob, S: niski strzał. Przytrzymaj i puść spację, by strzelić. Gracz 2: ← / →: ruch, ↑: skok, Shift: lob, ↓: niski strzał; przytrzymaj i puść Enter. Przyciski dotykowe znajdziesz w grze.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 
 export function Miniature() {
   return (
-    <svg viewBox="0 0 400 260" role="img" aria-label="Two players chasing a football across a windy pitch">
+    <svg preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 260" role="img" aria-label="Two players chasing a football across a windy pitch">
       <defs>
         <linearGradient id="soccer-duel-sky" x1="0" y1="0" x2="0" y2="1">
           <stop stopColor="#92c9ed" />

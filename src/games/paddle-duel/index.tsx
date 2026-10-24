@@ -2,18 +2,20 @@ import type { GameManifest } from '../contract.ts'
 
 export const manifest = {
   en: {
-    slug: 'paddle-duel', name: 'Paddle Duel', description: 'A table-tennis match on one keyboard. Steer rallies through boost orbs and race to five.',
-    genreSlug: 'two-player', players: '2 players', playTime: '3–6 min', accent: 'blue', controls: 'Player 1: W / S. Player 2: ↑ / ↓. Paddle movement steers each return; cross the court center to collect boosts.',
+    slug: 'paddle-duel', name: 'Paddle Duel', description: 'A table-tennis match on one keyboard. Steer rallies through boost orbs and play to seven, winning by two.',
+    localMultiplayer: true,
+    genreSlug: 'two-player', players: '2 players', playTime: '15+ min', accent: 'blue', controls: 'Player 1: W / S. Player 2: ↑ / ↓. Paddle movement steers each return; cross the court center to collect boosts.',
   },
   pl: {
-    slug: 'paddle-duel', name: 'Paddle Duel', description: 'Mecz tenisa stołowego na jednej klawiaturze. Kieruj piłkę przez bonusy i walcz do pięciu.',
-    genreSlug: 'two-player', players: '2 graczy', playTime: '3–6 min', accent: 'blue', controls: 'Gracz 1: W / S. Gracz 2: ↑ / ↓. Ruch pałki kieruje piłką; przetnij środek kortu, by zebrać bonus.',
+    slug: 'paddle-duel', name: 'Paddle Duel', description: 'Mecz tenisa stołowego na jednej klawiaturze. Kieruj piłkę przez bonusy i graj do siedmiu z przewagą dwóch.',
+    localMultiplayer: true,
+    genreSlug: 'two-player', players: '2 graczy', playTime: '15+ min', accent: 'blue', controls: 'Gracz 1: W / S. Gracz 2: ↑ / ↓. Ruch pałki kieruje piłką; przetnij środek kortu, by zebrać bonus.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 
 export function Miniature() {
   return (
-    <svg viewBox="0 0 400 260" role="img" aria-label="Two paddles and a ball">
+    <svg preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 260" role="img" aria-label="Two paddles and a ball">
       <defs>
         <linearGradient id="paddle-bg" x1="0" y1="0" x2="1" y2="1">
           <stop stopColor="#79ceff" />

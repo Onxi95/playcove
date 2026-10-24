@@ -10,6 +10,7 @@ export type GameManifest = {
   playTime: string
   accent: 'coral' | 'blue' | 'lime'
   controls: string
+  localMultiplayer?: boolean
 }
 
 export type GameProps = { locale: Locale }

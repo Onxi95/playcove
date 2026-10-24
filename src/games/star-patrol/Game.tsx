@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
+import { useCanvasResolution } from '../kit/use-canvas-resolution.ts'
 import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { GamePanel } from '../kit/GamePanel.tsx'
+import { SoundToggle } from '../kit/SoundToggle.tsx'
+import { useGameAudio } from '../kit/use-game-audio.ts'
 import { aimedShot, makeFormation } from './mechanics.ts'
 import type { Enemy } from './mechanics.ts'
 
@@ -202,6 +206,7 @@ export function Game({ locale }: GameProps) {
     start: 'Start patrol', again: 'Play again', resume: 'Resume', move: 'MOVE', fire: 'PULSE', upgrade: 'SHIELD · RAPID FIRE',
   }
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRevision = useCanvasResolution(canvasRef, WIDTH, HEIGHT)
   const [initialScene] = useState(createScene)
   const sceneRef = useRef(initialScene)
   const inputRef = useRef({ left: false, right: false, fire: false })
@@ -212,8 +217,9 @@ export function Game({ locale }: GameProps) {
   const [records, setRecords] = useState<ScoreEntry[]>([])
   const [saved, setSaved] = useState(false)
   const [runBest, setRunBest] = useState(0)
+  const { audio, enabled: soundEnabled, toggle: toggleSound } = useGameAudio(status, score > runBest)
   useEffect(() => { if (status === 'over') saveScore() }, [status])
-  useGameSession(status, setStatus, start)
+  useGameSession(status, setStatus, start, canvasRef)
   const [wave, setWave] = useState(1)
   const [lives, setLives] = useState(3)
   const [pulseEnergy, setPulseEnergy] = useState(100)
@@ -261,6 +267,7 @@ export function Game({ locale }: GameProps) {
       burst(scene, enemy.x, enemy.y, enemy.phase === 2 ? '#b69aff' : '#9bf3d0')
       scene.pulseEnergy = Math.min(100, scene.pulseEnergy + (enemy.phase === 2 ? 2 : 4))
       if (enemy.hits > 0) return
+      audio.play('hit')
       scene.enemies.splice(index, 1)
       scene.kills += 1
       scene.combo = scene.comboTimer > 0 ? Math.min(5, scene.combo + 1) : 1
@@ -279,10 +286,14 @@ export function Game({ locale }: GameProps) {
       scene.comboTimer = Math.max(0, scene.comboTimer - delta)
       if (scene.comboTimer === 0) scene.combo = 0
       if (inputRef.current.fire && scene.pulseEnergy >= 100 && !scene.betweenWaves) {
+        audio.play('boost')
         scene.pulseEnergy = 0
         scene.pulseFlash = 0.5
         scene.shots = scene.shots.filter((shot) => shot.owner === 'player')
-        for (let index = scene.enemies.length - 1; index >= 0; index -= 1) damageEnemy(index, scene.enemies[index].phase === 2 ? 5 : 1)
+        for (let index = scene.enemies.length - 1; index >= 0; index -= 1) {
+          const enemy = scene.enemies[index]
+          if (Math.hypot(enemy.x - scene.shipX, enemy.y - SHIP_Y) < 210) damageEnemy(index, 1)
+        }
         scene.invulnerable = Math.max(0.5, scene.invulnerable)
       }
       inputRef.current.fire = false
@@ -413,6 +424,7 @@ export function Game({ locale }: GameProps) {
       }
 
       if (!scene.betweenWaves && scene.enemies.length === 0) {
+        audio.play('point')
         scene.score += 100 * scene.wave
         scene.betweenWaves = true
         scene.waveTimer = 1
@@ -443,7 +455,7 @@ export function Game({ locale }: GameProps) {
       window.removeEventListener('keyup', keyUp)
       inputRef.current = { left: false, right: false, fire: false }
     }
-  }, [status])
+  }, [status, locale, canvasRevision])
 
   function start() {
     setRunBest(records[0]?.score ?? 0)
@@ -475,16 +487,21 @@ export function Game({ locale }: GameProps) {
   return (
     <div className={`module-game arcade-module star-module${status === 'playing' ? ' is-playing' : ''}`}>
       <div className="module-game-main">
-        <div className="module-game-heading"><div><span className="game-small-label">{copy.label}</span><h2>{copy.title}</h2></div><div className="arcade-game-stats"><div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div><div className="score-readout"><span>{copy.wave}</span><strong>{wave.toString().padStart(2, '0')}</strong></div><div className="score-readout"><span>{copy.lives}</span><strong>{'♥'.repeat(Math.max(0, lives))}</strong></div></div></div>
-        {status === 'playing' && <div className="arcade-livebar"><span>{locale === 'pl' ? 'AUTO OGIEŃ' : 'AUTO FIRE'}{combo > 1 ? ` · ×${combo}` : ''}</span><label className="boost-meter"><span>{copy.fire}</span><span className="boost-meter-track"><i style={{ width: `${pulseEnergy}%` }} /></span><span>{pulseEnergy}%</span></label><button onClick={() => setStatus('paused')}>Ⅱ {copy.pause}</button></div>}
+
         <div className="canvas-wrap arcade-canvas-wrap star-canvas-wrap">
-          <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Pole gry Star Patrol' : 'Star Patrol play field'} />
-          <GameOverlay status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Zmieniaj pozycję po salwie. Zostaw sobie drogę ucieczki.' : 'Move after each volley. Keep an escape route open.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.wave, value: wave }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }, { label: locale === 'pl' ? 'ZESTRZELENIA' : 'DESTROYED', value: sceneRef.current.kills }] }} />
+        <div className="module-game-heading game-frame-bar"><div><span className="game-small-label">{copy.label}</span><h2>STAR PATROL</h2></div><div className="arcade-game-stats"><div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div><div className="score-readout"><span>{copy.wave}</span><strong>{wave.toString().padStart(2, '0')}</strong></div><div className="score-readout"><span>{copy.lives}</span><strong>{'♥'.repeat(Math.max(0, lives))}</strong></div></div></div>
+          <canvas tabIndex={0} ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Pole gry Star Patrol' : 'Star Patrol play field'} />
+        {status === 'playing' && <div className="arcade-livebar"><span>{locale === 'pl' ? 'AUTO OGIEŃ' : 'AUTO FIRE'}{combo > 1 ? ` · ×${combo}` : ''}</span><label className="boost-meter"><span>{copy.fire}</span><span className="boost-meter-track"><i style={{ width: `${pulseEnergy}%` }} /></span><span>{pulseEnergy}%</span></label></div>}
+          <SoundToggle locale={locale} enabled={soundEnabled} onToggle={toggleSound} onPause={status === 'playing' ? () => setStatus('paused') : undefined} />
+          <GamePanel locale={locale} onOpen={() => { if (status === 'playing') setStatus('paused') }}>
+      <aside className="game-scoreboard arcade-scoreboard"><div className="scoreboard-heading"><span className="game-small-label">{copy.history}</span><span className="scoreboard-star">✳</span></div><p className="scoreboard-foot">{copy.upgrade}</p><label className="game-field"><span>{copy.nickname}</span><input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} /></label><div className="scoreboard-rule" /><div className="scoreboard-list">{records.length ? records.map((record, index) => <div className="scoreboard-row" key={`${record.name}-${record.score}-${index}`}><span className="score-rank">{String(index + 1).padStart(2, '0')}</span><span className="score-name">{record.name}</span><strong>{record.score}</strong></div>) : <p className="scoreboard-empty">{copy.empty}</p>}</div><div className="scoreboard-foot">{copy.local} · {copy.best}: {best.toLocaleString(locale)}</div></aside>
+          </GamePanel>
+          <GameOverlay gameName="STAR PATROL" onRestart={start} status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Zmieniaj pozycję po salwie. Zostaw sobie drogę ucieczki.' : 'Move after each volley. Keep an escape route open.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.wave, value: wave }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }, { label: locale === 'pl' ? 'ZESTRZELENIA' : 'DESTROYED', value: sceneRef.current.kills }] }} />
         </div>
         <div className="game-touch-controls star-touch-controls"><button onPointerDown={() => hold('left', true)} onPointerUp={() => hold('left', false)} onPointerCancel={() => hold('left', false)} onPointerLeave={() => hold('left', false)} aria-label={locale === 'pl' ? 'W lewo' : 'Move left'}>←</button><button disabled={status !== 'playing' || pulseEnergy < 100} onPointerDown={() => hold('fire', true)} onPointerUp={() => hold('fire', false)} onPointerCancel={() => hold('fire', false)} onPointerLeave={() => hold('fire', false)} aria-label={copy.fire}>✦</button><button onPointerDown={() => hold('right', true)} onPointerUp={() => hold('right', false)} onPointerCancel={() => hold('right', false)} onPointerLeave={() => hold('right', false)} aria-label={locale === 'pl' ? 'W prawo' : 'Move right'}>→</button></div>
         <p className="arcade-controls-note"><span>{copy.move} <kbd>←</kbd> <kbd>→</kbd> <kbd>A</kbd> <kbd>D</kbd></span><span>{copy.fire} <kbd>SPACE</kbd></span></p>
       </div>
-      <aside className="game-scoreboard arcade-scoreboard"><div className="scoreboard-heading"><span className="game-small-label">{copy.history}</span><span className="scoreboard-star">✳</span></div><p className="scoreboard-foot">{copy.upgrade}</p><label className="game-field"><span>{copy.nickname}</span><input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} /></label><div className="scoreboard-rule" /><div className="scoreboard-list">{records.length ? records.map((record, index) => <div className="scoreboard-row" key={`${record.name}-${record.score}-${index}`}><span className="score-rank">{String(index + 1).padStart(2, '0')}</span><span className="score-name">{record.name}</span><strong>{record.score}</strong></div>) : <p className="scoreboard-empty">{copy.empty}</p>}</div><div className="scoreboard-foot">{copy.local} · {copy.best}: {best.toLocaleString(locale)}</div></aside>
+
     </div>
   )
 }

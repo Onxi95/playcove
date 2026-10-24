@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
+import { useCanvasResolution } from '../kit/use-canvas-resolution.ts'
 import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { GamePanel } from '../kit/GamePanel.tsx'
+import { SoundToggle } from '../kit/SoundToggle.tsx'
+import { useGameAudio } from '../kit/use-game-audio.ts'
 import { matchWon, returnVelocity } from './mechanics.ts'
 
 type MatchRecord = { winner: string; final: string; p1: string; p2: string }
@@ -10,7 +14,7 @@ type BoostOrb = { x: number; y: number; type: BoostType }
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; duration: number; color: string }
 type Match = {
   ballX: number; ballY: number; ballVX: number; ballVY: number; leftY: number; rightY: number; p1: number; p2: number
-  speed: number; rally: number; lastHitter: 0 | 1; leftFlash: number; rightFlash: number; particles: Particle[]
+  speed: number; rally: number; longestRally: number; lastHitter: 0 | 1; leftFlash: number; rightFlash: number; particles: Particle[]
   serveTimer: number; pointTimer: number; lastPoint: 0 | 1 | null; boostOrb: BoostOrb | null
   p1Boost: BoostType | null; p2Boost: BoostType | null; p1BoostTimer: number; p2BoostTimer: number
 }
@@ -33,6 +37,7 @@ function createMatch(): Match {
     p2: 0,
     speed: 250,
     rally: 0,
+    longestRally: 0,
     lastHitter: 0,
     leftFlash: 0,
     rightFlash: 0,
@@ -220,6 +225,7 @@ export function Game({ locale }: GameProps) {
   const p1Fallback = copy.player(1)
   const p2Fallback = copy.player(2)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRevision = useCanvasResolution(canvasRef, WIDTH, HEIGHT)
   const [initialScene] = useState(createMatch)
   const matchRef = useRef(initialScene)
   const keysRef = useRef({ p1Up: false, p1Down: false, p2Up: false, p2Down: false })
@@ -229,8 +235,14 @@ export function Game({ locale }: GameProps) {
   const [p2Name, setP2Name] = useState(p2Fallback)
   const [records, setRecords] = useState<MatchRecord[]>([])
   const [saved, setSaved] = useState(false)
-  useEffect(() => { if (status === 'over') saveScore() }, [status])
-  useGameSession(status, setStatus, startGame)
+  const [series, setSeries] = useState<[number, number]>([0, 0])
+  const { audio, enabled: soundEnabled, toggle: toggleSound } = useGameAudio(status)
+  useEffect(() => {
+    if (status !== 'over') return
+    saveScore()
+    setSeries((current) => score.p1 > score.p2 ? [current[0] + 1, current[1]] : [current[0], current[1] + 1])
+  }, [status])
+  useGameSession(status, setStatus, startGame, canvasRef)
 
   useEffect(() => {
     setP1Name(readName('playcove.paddle-duel.player-1', p1Fallback))
@@ -272,6 +284,7 @@ export function Game({ locale }: GameProps) {
     }
 
     function resetBall(direction: number) {
+      audio.play('point')
       match.ballX = WIDTH / 2
       match.ballY = HEIGHT / 2
       match.speed = 250
@@ -344,6 +357,7 @@ export function Game({ locale }: GameProps) {
         }
 
         if (match.boostOrb && Math.hypot(match.ballX - match.boostOrb.x, match.ballY - match.boostOrb.y) < BALL_RADIUS + 16) {
+          audio.play('boost')
           grantBoost(match, match.lastHitter, match.boostOrb.type)
           addBurst(match, match.boostOrb.x, match.boostOrb.y, '#b8f26d', 12)
           match.boostOrb = null
@@ -357,7 +371,9 @@ export function Game({ locale }: GameProps) {
           const rebound = returnVelocity(offset, movement, match.speed, player === 0 ? 1 : -1, curve)
           match.ballVX = rebound.vx
           match.ballVY = rebound.vy
+          audio.play('hit')
           match.rally += 1
+          match.longestRally = Math.max(match.longestRally, match.rally)
           match.lastHitter = player
           if (player === 0) {
             match.ballX = 37 + PADDLE_W + BALL_RADIUS + 1
@@ -431,7 +447,7 @@ export function Game({ locale }: GameProps) {
       window.removeEventListener('keyup', handleKeyUp)
       keysRef.current = { p1Up: false, p1Down: false, p2Up: false, p2Down: false }
     }
-  }, [status, locale])
+  }, [status, locale, canvasRevision])
 
   function startGame() {
     matchRef.current = createMatch()
@@ -465,22 +481,15 @@ export function Game({ locale }: GameProps) {
   return (
     <div className={`module-game paddle-game${status === 'playing' ? ' is-playing' : ''}`}>
       <div className="module-game-main">
-        <div className="module-game-heading">
-          <div><span className="game-small-label">{copy.matchRule}</span><h2>{copy.title}</h2></div>
-          <div className="paddle-scoreline"><span>{p1Name || p1Fallback}</span><strong>{score.p1} <i>:</i> {score.p2}</strong><span>{p2Name || p2Fallback}</span></div>
-        </div>
+
         <div className="canvas-wrap paddle-canvas-wrap">
-          <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Boisko Paddle Duel' : 'Paddle Duel play field'} />
-          <GameOverlay status={status} locale={locale} title={status === 'over' ? `${winner} ${copy.winSuffix}` : status === 'paused' ? copy.paused : copy.startTitle} description={status === 'over' ? (locale === 'pl' ? 'Rewanż? Serwis zaczyna nową wymianę, bonusy zdobywacie od nowa.' : 'Rematch? A fresh serve, fresh boosts, and another chance to settle it.') : copy.goal} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.rematch : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startGame} result={{ value: `${score.p1}–${score.p2}`, label: `${winner} ${copy.winSuffix}`, saved, stats: [{ label: p1Name || p1Fallback, value: score.p1 }, { label: p2Name || p2Fallback, value: score.p2 }] }} />
+        <div className="module-game-heading game-frame-bar">
+          <div><span className="game-small-label">{copy.matchRule}</span><h2>PADDLE DUEL</h2></div>
+          <div className="paddle-scoreline"><span>{p1Name || p1Fallback}</span><strong>{score.p1} <i>:</i> {score.p2}</strong><span>{p2Name || p2Fallback}</span><small className="game-series-score">{locale === 'pl' ? 'SERIA' : 'SERIES'} {series[0]}–{series[1]}</small></div>
         </div>
-        <div className="paddle-touch-controls">
-          <div className="touch-player touch-p1"><span>{copy.player(1).toUpperCase()}</span><button aria-label={`${copy.player(1)} ${copy.up}`} onPointerDown={() => hold('p1', 'up', true)} onPointerUp={() => hold('p1', 'up', false)} onPointerCancel={() => hold('p1', 'up', false)} onPointerLeave={() => hold('p1', 'up', false)}>↑</button><button aria-label={`${copy.player(1)} ${copy.down}`} onPointerDown={() => hold('p1', 'down', true)} onPointerUp={() => hold('p1', 'down', false)} onPointerCancel={() => hold('p1', 'down', false)} onPointerLeave={() => hold('p1', 'down', false)}>↓</button></div>
-          <span className="touch-vs">VS</span>
-          <div className="touch-player touch-p2"><span>{copy.player(2).toUpperCase()}</span><button aria-label={`${copy.player(2)} ${copy.up}`} onPointerDown={() => hold('p2', 'up', true)} onPointerUp={() => hold('p2', 'up', false)} onPointerCancel={() => hold('p2', 'up', false)} onPointerLeave={() => hold('p2', 'up', false)}>↑</button><button aria-label={`${copy.player(2)} ${copy.down}`} onPointerDown={() => hold('p2', 'down', true)} onPointerUp={() => hold('p2', 'down', false)} onPointerCancel={() => hold('p2', 'down', false)} onPointerLeave={() => hold('p2', 'down', false)}>↓</button></div>
-        </div>
-        <div className="module-controls-caption"><span>{copy.player(1).toUpperCase()} <kbd>W</kbd> <kbd>S</kbd></span><i /> <span>{copy.player(2).toUpperCase()} <kbd>↑</kbd> <kbd>↓</kbd></span></div>
-        <p className="game-boost-note">{copy.boostHelp}</p>
-      </div>
+          <canvas tabIndex={0} ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Boisko Paddle Duel' : 'Paddle Duel play field'} />
+          <SoundToggle locale={locale} enabled={soundEnabled} onToggle={toggleSound} onPause={status === 'playing' ? () => setStatus('paused') : undefined} />
+          <GamePanel locale={locale} onOpen={() => { if (status === 'playing') setStatus('paused') }}>
       <aside className="game-scoreboard">
         <div className="scoreboard-heading"><span className="game-small-label">{copy.scoreboard}</span><span className="scoreboard-star">✳</span></div>
         <label className="game-field"><span>{copy.playerName(1)}</span><input value={p1Name} maxLength={14} onChange={(event) => setP1Name(event.target.value)} /></label>
@@ -493,6 +502,18 @@ export function Game({ locale }: GameProps) {
         </div>
         <div className="scoreboard-foot">{copy.local}</div>
       </aside>
+          </GamePanel>
+          <GameOverlay gameName="PADDLE DUEL" onRestart={startGame} status={status} locale={locale} title={status === 'over' ? `${winner} ${copy.winSuffix}` : status === 'paused' ? copy.paused : copy.startTitle} description={status === 'over' ? (locale === 'pl' ? 'Rewanż? Serwis zaczyna nową wymianę, bonusy zdobywacie od nowa.' : 'Rematch? A fresh serve, fresh boosts, and another chance to settle it.') : copy.goal} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.rematch : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startGame} result={{ value: `${score.p1}–${score.p2}`, label: `${winner} ${copy.winSuffix}`, saved, stats: [{ label: locale === 'pl' ? 'NAJDŁUŻSZA WYMIANA' : 'LONGEST RALLY', value: matchRef.current.longestRally }, { label: locale === 'pl' ? 'SERIA MECZÓW' : 'SERIES', value: `${series[0]}–${series[1]}` }] }} />
+        </div>
+        <div className="paddle-touch-controls">
+          <div className="touch-player touch-p1"><span>{copy.player(1).toUpperCase()}</span><button aria-label={`${copy.player(1)} ${copy.up}`} onPointerDown={() => hold('p1', 'up', true)} onPointerUp={() => hold('p1', 'up', false)} onPointerCancel={() => hold('p1', 'up', false)} onPointerLeave={() => hold('p1', 'up', false)}>↑</button><button aria-label={`${copy.player(1)} ${copy.down}`} onPointerDown={() => hold('p1', 'down', true)} onPointerUp={() => hold('p1', 'down', false)} onPointerCancel={() => hold('p1', 'down', false)} onPointerLeave={() => hold('p1', 'down', false)}>↓</button></div>
+          <span className="touch-vs">VS</span>
+          <div className="touch-player touch-p2"><span>{copy.player(2).toUpperCase()}</span><button aria-label={`${copy.player(2)} ${copy.up}`} onPointerDown={() => hold('p2', 'up', true)} onPointerUp={() => hold('p2', 'up', false)} onPointerCancel={() => hold('p2', 'up', false)} onPointerLeave={() => hold('p2', 'up', false)}>↑</button><button aria-label={`${copy.player(2)} ${copy.down}`} onPointerDown={() => hold('p2', 'down', true)} onPointerUp={() => hold('p2', 'down', false)} onPointerCancel={() => hold('p2', 'down', false)} onPointerLeave={() => hold('p2', 'down', false)}>↓</button></div>
+        </div>
+        <div className="module-controls-caption"><span>{copy.player(1).toUpperCase()} <kbd>W</kbd> <kbd>S</kbd></span><i /> <span>{copy.player(2).toUpperCase()} <kbd>↑</kbd> <kbd>↓</kbd></span></div>
+        <p className="game-boost-note">{copy.boostHelp}</p>
+      </div>
+
     </div>
   )
 }

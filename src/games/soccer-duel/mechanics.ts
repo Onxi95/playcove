@@ -10,8 +10,8 @@ export const botSettings = {
 export function shotProfile(player: { aim: ShotAim; vy: number; charge?: number }) {
   const power = 0.88 + Math.min(1, Math.max(0, player.charge ?? 0)) * 0.32
   return {
-    horizontal: power * ( player.aim === 'lob' ? 510 : player.aim === 'ground' ? 790 : 690),
-    vertical: power * (player.aim === 'lob' ? -570 + Math.min(0, player.vy * 0.08) : player.aim === 'ground' ? -85 : -300),
+    horizontal: power * (player.aim === 'lob' ? 460 : player.aim === 'ground' ? 700 : 610),
+    vertical: power * (player.aim === 'lob' ? -500 + Math.min(0, player.vy * 0.08) : player.aim === 'ground' ? -65 : -225),
   }
 }
 

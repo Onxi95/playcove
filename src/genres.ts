@@ -28,3 +28,7 @@ export function getGenres(locale: Locale) {
 export function getGenre(slug: string, locale: Locale) {
   return genres[locale].find((genre) => genre.slug === slug)
 }
+
+export function matchesGenre(game: { genreSlug: string; localMultiplayer?: boolean }, genre: string) {
+  return genre === 'all' || game.genreSlug === genre || (genre === 'two-player' && game.localMultiplayer === true)
+}

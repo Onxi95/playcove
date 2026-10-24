@@ -9,7 +9,9 @@ npm install
 npm run dev
 ```
 
-Create the production build with `npm run build`. The build runs TypeScript checking after Vite prerendering. Deploy its static output to a CDN or static host; no application server is needed to play.
+Run `npm test` for gameplay, restart, rendering, theme, and high-DPI checks. Create the production build with `npm run build`. The build runs TypeScript checking after Vite prerendering. Deploy its static output to a CDN or static host; no application server is needed to play.
+
+Set `VITE_SITE_URL` to the production origin for absolute SEO URLs. See [landing and SEO behavior](docs/seo.md). Light/dark themes follow the system until the user saves a preference.
 
 ## Add a game
 
@@ -22,7 +24,7 @@ The game receives only its locale, with no router, portal state, or server API. 
 
 ## Game design
 
-Games should be compelling and replayable through responsive controls, satisfying feedback, skill, fair challenge, and quick rematches. See [the game design standard](docs/game-design.md) before adding a game.
+Design for 15–30 minute sessions with responsive controls, varied challenges, expandable mechanics, and quick rematches. Connect short matches into longer runs or series, and save ongoing progress locally. See [the game design standard](docs/game-design.md) before adding or changing a game.
 
 ## Included games
 

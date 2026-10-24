@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-export async function loadGame(game, locale = 'en', stored = {}) {
+export async function loadGame(game, locale = 'en', stored = {}, display = { width: 800, ratio: 1 }) {
   let cursor = 0
   let dirty = false
   let tree
@@ -12,6 +12,7 @@ export async function loadGame(game, locale = 'en', stored = {}) {
   let nextFrame = 0
   let seed = 12345
   let drawCalls = 0
+  const drawnText = new Set()
   const slots = []
   const effects = []
   const frames = new Map()
@@ -42,12 +43,13 @@ export async function loadGame(game, locale = 'en', stored = {}) {
       if (key === 'measureText') return (text) => ({ width: String(text).length * 7 })
       return (...args) => {
         drawCalls += 1
+        if (key === 'fillText') drawnText.add(String(args[0]))
         for (const value of args) if (typeof value === 'number') assert.ok(Number.isFinite(value), `${game}: ${String(key)} received ${value}`)
       }
     },
     set(target, key, value) { target[key] = value; return true },
   })
-  const canvas = { getContext: () => context2d, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 440 }), setPointerCapture() {} }
+  const canvas = { width: 0, height: 0, style: {}, getContext: () => context2d, getBoundingClientRect: () => ({ left: 0, top: 0, width: display.width, height: display.width * 0.55 }), setPointerCapture() {}, focus() {}, closest() { return null } }
   const react = {
     useState(initial) {
       const index = cursor++
@@ -77,12 +79,12 @@ export async function loadGame(game, locale = 'en', stored = {}) {
   const random = Object.create(Math)
   random.random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
   const document = { hidden: false, ...events('document') }
-  const window = { ...events('window'), cancelAnimationFrame: (id) => frames.delete(id) }
+  const window = { get devicePixelRatio() { return display.ratio }, ...events('window'), cancelAnimationFrame: (id) => frames.delete(id) }
   const context = vm.createContext({
     console, Math: random, HTMLElement: Element, window, document,
     performance: { now: () => clock },
     requestAnimationFrame(callback) { const id = ++nextFrame; frames.set(id, callback); return id },
-    localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+    localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) },
   })
   const modules = new Map()
   async function moduleAt(path) {
@@ -131,7 +133,8 @@ export async function loadGame(game, locale = 'en', stored = {}) {
   return {
     get status() { return overlay().status },
     get drawCalls() { return drawCalls },
-    storage, overlay, find,
+    storage, overlay, find, drawnText, canvas,
+    resize(width, ratio) { display.width = width; display.ratio = ratio; emit('window', 'resize') },
     scene() {
       return slots.find((slot) => slot.kind === 'ref' && slot.value.current && ['snake', 'ballX', 'players', 'obstacles', 'enemies'].some((key) => key in slot.value.current))?.value.current
     },

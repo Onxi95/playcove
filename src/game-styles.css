@@ -1,4 +1,4 @@
-.module-game { width: min(1050px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 21px; margin: auto; }
+.module-game { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 21px; margin: auto; }
 .module-game-main { min-width: 0; }
 .module-game-heading { min-height: 54px; display: flex; align-items: start; justify-content: space-between; gap: 14px; margin-bottom: 11px; }
 .module-game-heading h2 { margin: 5px 0 0; font: 600 19px/1.1 var(--display); letter-spacing: -.05em; }
@@ -21,12 +21,16 @@
 .module-game.is-playing { touch-action: none; overscroll-behavior: contain; }
 .module-game button:focus-visible { outline: 3px solid #efad51; outline-offset: 3px; }
 .game-session-hint { margin-top: 14px; color: #76766b; font: 8px/1.6 var(--mono); }
-.canvas-wrap:has(.game-results) { min-height: 375px; }
+.game-restart-link { margin-top: 10px; padding: 5px; border: 0; color: #687265; background: transparent; font: 10px var(--mono); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.game-sound-toggle { position: absolute; z-index: 2; top: 9px; right: 9px; min-height: 28px; display: flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid #ffffff29; border-radius: 5px; color: #f9f3de; background: #23352be0; font: 8px var(--mono); cursor: pointer; }
+.game-sound-toggle > span { font-size: 13px; }
+.game-series-score { margin-top: 3px; color: #697d67; font: 8px var(--mono); }
+.canvas-wrap:has(.game-results) { min-height: 520px; }
 .game-results { padding: 22px; color: #fff7e8; background: radial-gradient(ellipse at 50% 0%, rgba(78,106,104,.88), rgba(13,24,36,.94) 75%); backdrop-filter: blur(5px); }
 .game-result-content { width: min(350px, 100%); display: flex; flex-direction: column; align-items: center; animation: result-arrives .18s ease-out both; }
 .game-result-badge { max-width: 100%; overflow: hidden; padding: 5px 10px; border: 1px solid #ffffff25; border-radius: 30px; color: #d2e0db; font: 700 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .game-result-badge.is-record { color: #ffe5a1; border-color: #ffe5a14d; background: #ffe5a111; }
-.game-result-value { margin-top: 4px; color: #fff7e8; font: 750 clamp(42px, 6vw, 70px)/1.05 var(--display); letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.game-result-value { margin-top: 4px; color: #fff7e8; font: 750 clamp(42px, 6vw, 60px)/1.05 var(--display); letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
 .game-result-label { color: #acbfb9; font: 9px var(--mono); letter-spacing: .09em; }
 .game-result-stats { width: 100%; display: flex; justify-content: center; gap: 6px; margin-top: 15px; }
 .game-result-stats > div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 9px 5px; border: 1px solid #ffffff13; border-radius: 7px; background: #ffffff07; }
@@ -36,10 +40,10 @@
 .game-result-chase > div { height: 4px; margin-top: 7px; overflow: hidden; border-radius: 4px; background: #ffffff17; }
 .game-result-chase i { display: block; height: 100%; border-radius: inherit; background: #e7bf76; }
 .game-result-detail { max-width: 320px; margin: 12px 0 0; color: #bccdc5; font-size: 11px; line-height: 1.5; }
-.game-retry-button { width: 100%; min-height: 48px; gap: 10px; margin-top: 14px; border: 1px solid #ffe3a1; border-radius: 8px; color: #283a36; background: #f6d892; font-size: 13px; }
-.game-retry-button:hover { color: #152824; background: #ffe8b0; transform: translateY(-1px); }
-.game-retry-button > span { font-size: 24px; }
-.game-retry-button kbd { margin-left: auto; padding: 2px 7px; border: 1px solid #283a362c; border-radius: 4px; font-size: 13px; }
+.game-results .game-retry-button { width: 100%; min-height: 48px; gap: 10px; margin-top: 14px; border: 1px solid #ffe3a1; border-radius: 8px; color: #283a36; background: #f6d892; font-size: 13px; }
+.game-results .game-retry-button:hover { color: #152824; background: #ffe8b0; transform: translateY(-1px); }
+.game-results .game-retry-button > span { font-size: 24px; }
+.game-results .game-retry-button kbd { margin-left: auto; padding: 2px 7px; border: 1px solid #283a362c; border-radius: 4px; font-size: 13px; }
 .game-result-footer { display: flex; flex-direction: column; gap: 6px; margin-top: 11px; color: #a5b9b1; font: 8px/1.4 var(--mono); }
 .game-result-footer > span { color: #d7e3db; font-size: 7px; letter-spacing: .05em; }
 .game-touch-controls button:disabled { opacity: .4; cursor: default; }
@@ -184,4 +188,161 @@
   .soccer-touch-controls { align-items: flex-start; flex-direction: column; padding-block: 6px; }
   .soccer-touch-player { width: 100%; justify-content: flex-end; }
   .soccer-touch-player > span { margin-right: auto; }
+}
+
+.game-page.page-wrap { width: min(1440px, calc(100% - 32px)); }
+.game-page .breadcrumbs { padding-block: 15px 9px; }
+.game-page .game-intro { padding-block: 8px 18px; gap: 20px; }
+.game-page .game-intro h1 { margin: 0 0 5px; font-size: 30px; }
+.game-page .game-intro .eyebrow { display: none; }
+.game-page .game-intro p { font-size: 12px; }
+.game-page .play-shell { overflow: visible; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.game-page .play-shell-top { display: none; }
+.game-page .game-mount { padding: 0; background: transparent; }
+.game-page:has(.module-game.is-playing) .game-intro, .game-page:has(.module-game.is-playing) .breadcrumbs { display: none; }
+.game-page:has(.module-game.is-playing) .play-shell { padding-top: 12px; }
+.module-game { --play-accent: #d4f17c; --play-surface: #142b29; --play-ink: #142521; --game-ratio: 1.81818; scroll-margin-top: 12px; }
+.brick-game { --play-accent: #ffb07b; --play-surface: #302735; --play-ink: #332632; }
+.snake-module { --play-accent: #a0ffc5; --play-surface: #0b2829; --play-ink: #0b2927; --game-ratio: 1; }
+.runner-module { --play-accent: #ffd783; --play-surface: #32273d; --play-ink: #362737; }
+.star-module { --play-accent: #b6a0ff; --play-surface: #191935; --play-ink: #211b3a; --game-ratio: 1.6; }
+.paddle-game { --play-accent: #a7d8ff; --play-surface: #152b42; --play-ink: #182b3f; }
+.soccer-game { --play-accent: #d6fa83; --play-surface: #152b25; --play-ink: #172c23; --game-ratio: 1.8; }
+.module-game .canvas-wrap { width: min(100%, calc((100dvh - 210px) * var(--game-ratio))); margin-inline: auto; border: 1px solid #ffffff12; border-radius: 14px; background: var(--play-surface); box-shadow: 0 16px 40px #0a18251c; }
+.module-game .canvas-wrap:has(.game-overlay) { min-height: 520px; }
+.module-game .canvas-wrap:has(.has-settings) { min-height: 600px; }
+.module-game .game-frame-bar { min-height: 64px; align-items: center; margin: 0; padding: 12px 300px 12px 18px; border-bottom: 1px solid #ffffff13; background: var(--play-surface); }
+.game-frame-bar h2 { margin: 4px 0 0; color: var(--play-accent); font: italic 900 16px/1 var(--font-ui); letter-spacing: -.035em; }
+.game-frame-bar .game-small-label { color: #aec0c3; font: 8px var(--mono); }
+.game-frame-bar .score-readout > span, .game-frame-bar .paddle-scoreline > span, .game-frame-bar .soccer-scoreline > span { color: #a8bfba; font: 8px var(--mono); }
+.game-frame-bar .score-readout strong, .game-frame-bar .paddle-scoreline strong, .game-frame-bar .soccer-scoreline strong { color: #f4f5e9; font: 750 20px var(--mono); }
+.game-frame-bar .game-series-score { color: var(--play-accent); }
+.game-frame-bar .soccer-scoreline > span { display: none; }
+.game-frame-bar .soccer-scoreline small { display: none; }
+.module-game .game-overlay { inset: 64px 0 0; }
+.module-game .game-start-screen { display: flex; padding: 35px; overflow: auto; color: #fff9e9; background: linear-gradient(110deg, var(--play-surface) 12%, color-mix(in srgb, var(--play-surface) 91%, transparent) 52%, color-mix(in srgb, var(--play-surface) 65%, transparent)); backdrop-filter: blur(2px); text-align: left; }
+.game-start-layout { width: min(1060px, 100%); display: grid; gap: 42px; align-items: center; }
+.has-settings .game-start-layout { grid-template-columns: minmax(0, 1.1fr) minmax(290px, 1fr); }
+.game-start-copy { max-width: 540px; display: flex; flex-direction: column; align-items: flex-start; }
+.game-wordmark { max-width: 600px; display: block; color: var(--play-accent); font: italic 950 clamp(38px, 6vw, 76px)/.95 var(--font-ui); letter-spacing: -.065em; text-wrap: balance; }
+.game-start-copy > strong { margin-top: 21px; color: #fff7e5; font: 650 20px/1.2 var(--font-display); letter-spacing: -.025em; }
+.game-start-copy > p { max-width: 430px; margin: 10px 0 0; color: #bed1ca; font-size: 13px; line-height: 1.6; }
+.module-game .game-start-button { min-width: 210px; min-height: 48px; margin-top: 22px; padding-inline: 20px; border: 0; color: var(--play-ink); background: var(--play-accent); font-size: 13px; font-weight: 800; }
+.module-game .game-start-button:hover { background: #fff9d9; transform: translateY(-2px); }
+.game-start-copy .game-session-hint { margin-top: 15px; color: #9fb8af; font-size: 8px; }
+.game-start-copy .game-restart-link { color: #d3dfd1; }
+.module-game .game-results { background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--play-surface) 92%, var(--play-accent)), var(--play-surface) 75%); }
+.game-result-value { color: var(--play-accent); font-family: var(--mono); font-weight: 800; }
+.game-results .game-retry-button { color: var(--play-ink); border-color: var(--play-accent); background: var(--play-accent); }
+.game-results .game-retry-button:hover { background: #fff5cf; }
+.game-screen-tools { position: absolute; z-index: 4; top: 16px; right: 12px; display: flex; gap: 5px; }
+.game-screen-tools button, .game-records-panel > summary { min-width: 32px; min-height: 32px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 9px; border: 1px solid #ffffff22; border-radius: 5px; color: #dce7d9; background: #ffffff08; font: 9px var(--mono); cursor: pointer; }
+.game-screen-tools .game-sound-toggle { position: static; }
+.game-screen-tools .game-fullscreen-toggle { font-size: 19px; }
+.game-screen-tools button:hover, .game-records-panel > summary:hover { color: var(--play-accent); background: #ffffff15; }
+.game-records-panel > summary { position: absolute; z-index: 4; top: 16px; right: 206px; list-style: none; }
+.game-records-panel > summary::-webkit-details-marker { display: none; }
+.game-records-panel > summary > span:first-child { font-size: 17px; }
+.game-panel-scrim { position: absolute; z-index: 5; inset: 64px 0 0; display: flex; justify-content: flex-end; background: #060f25a6; backdrop-filter: blur(3px); }
+.game-panel-sheet { width: min(350px, 100%); position: relative; padding: 28px 24px; overflow: auto; background: #f5f4eb; }
+.game-panel-close { position: absolute; z-index: 1; top: 10px; right: 12px; width: 32px; height: 32px; border: 1px solid #d3d6c7; border-radius: 4px; color: #4e6057; background: #ffffffb0; font-size: 23px; cursor: pointer; }
+.game-panel-sheet .game-scoreboard { min-height: 0; padding: 0; border: 0; }
+.game-panel-sheet .scoreboard-heading { margin-right: 28px; }
+.game-panel-sheet .score-name small { display: block; color: #7e8e85; font-size: 9px; }
+.module-game .arcade-livebar, .module-game .soccer-matchbar { min-height: 31px; margin: 0; padding: 7px 15px; color: #bfccc7; background: var(--play-surface); font: 9px var(--mono); }
+.module-game .soccer-matchbar strong { color: var(--play-accent); }
+.module-game .boost-meter { color: var(--play-accent); font-size: 8px; }
+.module-game .boost-meter-track { width: 85px; background: #ffffff1e; }
+.module-game .boost-meter-track i { background: var(--play-accent); }
+.module-game .soccer-setup { margin: 0; padding: 20px; gap: 18px; border: 1px solid #d5f28d30; border-radius: 8px; background: #071f1b80; }
+.module-game .soccer-setup-row { align-items: start; flex-direction: column; gap: 9px; }
+.module-game .soccer-setup-label, .module-game .soccer-level small { color: #9ab5a4; font: 9px var(--mono); }
+.module-game .soccer-mode-options { width: 100%; gap: 5px; }
+.module-game .soccer-choice { min-height: 37px; flex: 1; padding: 7px; border: 1px solid #ffffff1e; border-radius: 4px; color: #c4d6c8; background: #ffffff06; font-size: 10px; }
+.module-game .soccer-choice.is-active { color: #183227; border-color: var(--play-accent); background: var(--play-accent); }
+.module-game .soccer-level { padding: 10px 7px; border-color: #ffffff1f; border-radius: 4px; background: #ffffff05; }
+.module-game .soccer-level.is-active { border-color: var(--play-accent); background: #d8ff7912; box-shadow: none; }
+.module-game .soccer-level strong { color: #e1ebcf; font-size: 10px; }
+.module-game .soccer-level > span { color: #99b7a9; }
+.soccer-campaign-panel > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #d4e9c8; font: 9px var(--mono); }
+.soccer-campaign-panel strong { color: var(--play-accent); font-size: 14px; }
+.soccer-campaign-panel b { color: #f3938c; letter-spacing: .15em; }
+.soccer-cup-progress { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-block: 13px 9px; }
+.soccer-cup-progress i { height: 7px; background: #ffffff17; }
+.soccer-cup-progress i.is-earned { background: var(--play-accent); }
+.soccer-campaign-panel p { margin: 0; color: #a9c2ae; font: 9px/1.7 var(--mono); }
+.soccer-menu-controls { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid #ffffff16; color: #aec4b5; font: 9px/1.7 var(--mono); }
+.soccer-menu-controls kbd { padding: 3px 5px; border: 1px solid #ffffff29; border-radius: 3px; color: #e3ebd5; }
+.module-game:fullscreen { width: 100vw; height: 100dvh; padding: 12px; overflow: auto; background: #0b141e; }
+.module-game:fullscreen .canvas-wrap { width: min(100%, calc((100dvh - 150px) * var(--game-ratio))); }
+.module-game:fullscreen .arcade-controls-note, .module-game:fullscreen .module-controls-caption, .module-game:fullscreen .game-boost-note, .module-game:fullscreen .soccer-aim-hint { color: #bccdc6; }
+@media (hover: hover) and (pointer: fine) { .game-touch-controls, .paddle-touch-controls { display: none; } }
+@media (max-width: 850px) {
+  .module-game .game-frame-bar { padding-right: 230px; }
+  .game-screen-tools .game-sound-toggle > span:last-child { display: none; }
+  .game-records-panel > summary { right: 128px; }
+  .has-settings .game-start-layout { gap: 24px; grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr); }
+  .module-game .game-start-screen { padding: 25px; }
+}
+@media (max-width: 600px) {
+  .game-page.page-wrap { width: calc(100% - 16px); }
+  .game-page .game-intro { padding: 6px 6px 13px; }
+  .game-page .game-intro h1 { font-size: 25px; }
+  .game-page .game-intro p { display: none; }
+  .module-game .canvas-wrap { width: 100%; border-radius: 8px; }
+  .module-game .game-frame-bar { min-height: 92px; align-items: start; justify-content: start; flex-direction: column; gap: 9px; padding: 12px; }
+  .module-game .game-frame-bar > div:last-child { flex-direction: row; gap: 12px; }
+  .game-frame-bar h2 { margin: 2px 0 0; font-size: 13px; }
+  .game-frame-bar .game-small-label { font-size: 7px; }
+  .game-frame-bar .score-readout { flex-direction: row; align-items: baseline; gap: 5px; }
+  .game-frame-bar .score-readout strong, .game-frame-bar .paddle-scoreline strong, .game-frame-bar .soccer-scoreline strong { font-size: 16px; }
+  .game-frame-bar .paddle-scoreline > span { display: none; }
+  .module-game .game-overlay, .game-panel-scrim { top: 92px; }
+  .game-records-panel > summary { right: 128px; min-width: 32px; padding-inline: 7px; }
+  .game-records-panel > summary > span:last-child { display: none; }
+  .module-game .canvas-wrap:has(.game-overlay) { min-height: 540px; }
+  .module-game .canvas-wrap:has(.has-settings) { min-height: 740px; }
+  .module-game .game-start-screen { padding: 24px; }
+  .game-start-layout, .has-settings .game-start-layout { display: flex; flex-direction: column; gap: 25px; align-items: stretch; }
+  .game-wordmark { font-size: 43px; }
+  .game-start-copy > strong { margin-top: 15px; font-size: 18px; }
+  .game-start-copy > p { font-size: 12px; }
+  .game-start-copy .game-session-hint { font-size: 7px; }
+  .game-start-copy .game-start-button { width: 100%; margin-top: 16px; }
+  .module-game .soccer-setup { padding: 15px; gap: 14px; }
+  .module-game .soccer-matchbar, .module-game .arcade-livebar { font-size: 8px; }
+  .module-game .boost-meter-track { width: 52px; }
+}
+
+.brick-run-stats { display: flex; align-items: center; gap: 14px; }
+
+.game-panel-sheet { color: var(--color-ink); background: var(--color-surface); }
+.game-panel-sheet .score-name, .game-panel-sheet .match-log-row strong, .game-panel-sheet .scoreboard-row > strong, .game-panel-sheet .arcade-record-number, .game-panel-sheet .match-log-row > b { color: var(--color-ink); }
+.game-panel-sheet .game-small-label, .game-panel-sheet .game-field > span, .game-panel-sheet .scoreboard-foot, .game-panel-sheet .scoreboard-empty { color: var(--color-muted); }
+.game-panel-sheet .game-field input { color: var(--color-ink); border-color: var(--color-line); background: var(--color-canvas); }
+.game-panel-sheet .scoreboard-rule { background: var(--color-line); }
+.game-panel-sheet .scoreboard-row, .game-panel-sheet .match-log-row { border-color: var(--color-line); }
+.game-panel-close { color: var(--color-copy); border-color: var(--color-line); background: var(--color-surface); }
+.game-touch-controls button, .touch-player button, .soccer-touch-player button { color: var(--color-copy); border-color: var(--color-line); background: var(--color-surface); }
+.module-game { --game-bar-height: 64px; }
+.module-game .canvas-wrap { container-type: inline-size; }
+.module-game .game-frame-bar { height: var(--game-bar-height); min-height: var(--game-bar-height); }
+.module-game .game-frame-bar h2 { white-space: nowrap; }
+.module-game .game-overlay, .game-panel-scrim { top: var(--game-bar-height); }
+@container (max-width: 650px) {
+  .module-game .game-start-screen { padding: 24px; }
+  .game-start-layout, .has-settings .game-start-layout { display: flex; flex-direction: column; gap: 24px; align-items: stretch; }
+  .game-wordmark { font-size: 39px; }
+  .game-frame-bar { --game-bar-height: 92px; }
+  .module-game .game-frame-bar { height: 92px; min-height: 92px; align-items: start; justify-content: start; flex-direction: column; gap: 9px; padding: 12px; }
+  .module-game .game-frame-bar > div:last-child { flex-direction: row; gap: 12px; }
+  .game-frame-bar h2 { margin: 2px 0 0; font-size: 13px; }
+  .game-frame-bar .game-small-label { font-size: 7px; }
+  .game-frame-bar .score-readout { flex-direction: row; align-items: baseline; gap: 5px; }
+  .game-frame-bar .score-readout strong, .game-frame-bar .paddle-scoreline strong, .game-frame-bar .soccer-scoreline strong { font-size: 16px; }
+  .game-frame-bar .paddle-scoreline > span { display: none; }
+  .module-game .game-overlay, .game-panel-scrim { top: 92px; }
+  .game-screen-tools .game-sound-toggle > span:last-child { display: none; }
+  .game-records-panel > summary { right: 128px; min-width: 32px; padding-inline: 7px; }
+  .game-records-panel > summary > span:last-child { display: none; }
 }

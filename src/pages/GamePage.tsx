@@ -46,7 +46,7 @@ export function GamePage({ slug, locale }: { slug: string; locale: Locale }) {
       </section>
 
       <div className="game-details-row">
-        <section className="control-note"><div><span className="eyebrow">{copy.controls}</span><p>{manifest.controls}</p></div></section>
+        <details className="control-note"><summary>{copy.controls}<span aria-hidden="true">+</span></summary><p>{manifest.controls}</p></details>
         <AdSlot placement={`game-${manifest.slug}-below-play-${locale}`} />
       </div>
 

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { getGenre } from '../genres'
 import { GenrePage } from '../pages/GenrePage'
 import { normalizeLocale } from '../i18n'
+import { siteUrl } from '../site'
 
 export const Route = createFileRoute('/$locale/genres/$slug')({
   head: ({ params }) => {
@@ -9,6 +10,7 @@ export const Route = createFileRoute('/$locale/genres/$slug')({
     const genre = getGenre(params.slug, locale)
     return {
       links: [
+        { rel: 'canonical', href: siteUrl(`/${locale}/genres/${params.slug}`) },
         { rel: 'alternate', hrefLang: 'en', href: `/en/genres/${params.slug}` },
         { rel: 'alternate', hrefLang: 'pl', href: `/pl/genres/${params.slug}` },
       ],

@@ -1,12 +1,12 @@
 import { GameCard } from '../components/GameCard'
 import { games } from '../games/registry'
-import { getGenre } from '../genres'
+import { getGenre, matchesGenre } from '../genres'
 import { getLocalePath, getMessages, type Locale } from '../i18n'
 
 export function GenrePage({ slug, locale }: { slug: string; locale: Locale }) {
   const copy = getMessages(locale)
   const genre = getGenre(slug, locale)
-  const genreGames = games.filter(({ manifest }) => manifest[locale].genreSlug === slug)
+  const genreGames = games.filter(({ manifest }) => matchesGenre(manifest[locale], slug))
 
   if (!genre) {
     return <main className="not-found page-wrap"><span className="eyebrow">PLAYCOVE</span><h1>{copy.genreNotFound}</h1><a className="button button-primary" href={getLocalePath(locale)}>{copy.backToGames}<span aria-hidden="true">→</span></a></main>

@@ -3,17 +3,17 @@ import type { GameManifest } from '../contract.ts'
 export const manifest = {
   en: {
     slug: 'star-patrol', name: 'Star Patrol', description: 'Hold the line against incoming formations, clear waves, and scoop up ship upgrades.',
-    genreSlug: 'arcade', players: '1 player', playTime: '5–10 min', accent: 'blue', controls: 'Move with ← / → or A / D. Hold Space to fire. Collect shield and rapid-fire upgrades.',
+    genreSlug: 'arcade', players: '1 player', playTime: '15+ min', accent: 'blue', controls: 'Move with ← / → or A / D. The ship fires automatically. Press Space for a charged pulse that clears bullets. Collect shield and rapid-fire upgrades.',
   },
   pl: {
     slug: 'star-patrol', name: 'Star Patrol', description: 'Powstrzymaj kolejne formacje, czyść fale i zbieraj ulepszenia statku.',
-    genreSlug: 'arcade', players: '1 gracz', playTime: '5–10 min', accent: 'blue', controls: 'Poruszaj się ← / → lub A / D. Przytrzymaj spację, aby strzelać. Zbieraj tarczę i szybkostrzelność.',
+    genreSlug: 'arcade', players: '1 gracz', playTime: '15+ min', accent: 'blue', controls: 'Poruszaj się ← / → lub A / D. Statek strzela automatycznie. Spacja aktywuje naładowany impuls usuwający pociski. Zbieraj tarczę i szybkostrzelność.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 
 export function Miniature() {
   return (
-    <svg viewBox="0 0 400 260" role="img" aria-label="Blue ship firing at an alien formation">
+    <svg preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 260" role="img" aria-label="Blue ship firing at an alien formation">
       <defs><linearGradient id="patrol-art-bg" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#171b4d" /><stop offset="1" stopColor="#493477" /></linearGradient></defs>
       <rect width="400" height="260" rx="22" fill="url(#patrol-art-bg)" />
       <g fill="#fff" opacity=".72"><circle cx="43" cy="41" r="2"/><circle cx="114" cy="77" r="2"/><circle cx="326" cy="48" r="2"/><circle cx="359" cy="139" r="2"/><circle cx="57" cy="172" r="2"/><circle cx="274" cy="94" r="2"/></g>

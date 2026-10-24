@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
+import { useCanvasResolution } from '../kit/use-canvas-resolution.ts'
 import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { GamePanel } from '../kit/GamePanel.tsx'
+import { SoundToggle } from '../kit/SoundToggle.tsx'
+import { useGameAudio } from '../kit/use-game-audio.ts'
 import { ballInKickRange, botSettings, shotProfile } from './mechanics.ts'
 import type { BotDifficulty, ShotAim } from './mechanics.ts'
+import { clearCareerCheckpoint, createCareer, finishCareerMatch, opponentFor, readCareerCheckpoint, readCareerRecords, writeCareerCheckpoint, writeCareerRecords } from './career.ts'
+import type { CareerCheckpoint, CareerRecord } from './career.ts'
+import { collideGoalFrames, collidePlayer, goalScorer, integrateBall } from './ball-physics.ts'
 
 type Mode = 'bot' | 'local'
 type LevelId = 'practice' | 'coast' | 'rooftop'
@@ -19,7 +26,6 @@ const GROUND = 426
 const PLAYER_WIDTH = 32
 const PLAYER_HEIGHT = 72
 const BALL_RADIUS = 12
-const WIN_SCORE = 3
 const GRAVITY = 1450
 const GOAL_INSET = 20
 const GOAL_WIDTH = 112
@@ -112,17 +118,20 @@ function drawPlayer(context: CanvasRenderingContext2D, player: Player, ball: Bal
     const startX = hasBallInRange ? player.x + player.facing * (PLAYER_WIDTH / 2 + BALL_RADIUS + 2) : footX
     const startY = hasBallInRange ? ball.y : footY
     const profile = shotProfile(player)
-    const velocityX = player.facing * profile.horizontal + player.vx * 0.35
-    const gravity = GRAVITY * 0.56
+    const velocityX = player.facing * profile.horizontal + player.vx * 0.18
+    const preview = { x: startX, y: startY, vx: velocityX, vy: profile.vertical }
     context.fillStyle = player.aim === 'lob' ? 'rgba(255,255,255,.82)' : 'rgba(255,246,179,.82)'
-    for (let index = 1; index <= 7; index += 1) {
-      const flight = index * 0.11
-      const projectedX = startX + velocityX * flight + wind * flight * flight * 0.5
-      const projectedY = startY + profile.vertical * flight + gravity * flight * flight * 0.5
-      context.globalAlpha = 1 - index * 0.085
-      context.beginPath()
-      context.arc(projectedX, projectedY, 2 + (7 - index) * 0.32, 0, Math.PI * 2)
-      context.fill()
+    for (let step = 1; step <= 42; step += 1) {
+      const previous = integrateBall(preview, 1 / 60, wind)
+      collideGoalFrames(preview)
+      if (step % 6 === 0) {
+        const index = step / 6
+        context.globalAlpha = 1 - index * 0.085
+        context.beginPath()
+        context.arc(preview.x, preview.y, 2 + (7 - index) * 0.32, 0, Math.PI * 2)
+        context.fill()
+      }
+      if (goalScorer(previous, preview) !== null) break
     }
     context.globalAlpha = 1
   }
@@ -168,7 +177,7 @@ function drawPlayer(context: CanvasRenderingContext2D, player: Player, ball: Bal
   context.fill()
 }
 
-function drawScene(context: CanvasRenderingContext2D, match: Match, level: LevelId, time: number, goalLabel: string) {
+function drawScene(context: CanvasRenderingContext2D, match: Match, level: LevelId, time: number, goalLabel: string, matchLabel: string) {
   const arena = arenas[level]
   const wind = windAt(match.elapsed * 1000, level)
   context.clearRect(0, 0, WIDTH, HEIGHT)
@@ -300,6 +309,18 @@ function drawScene(context: CanvasRenderingContext2D, match: Match, level: Level
   }
   context.globalAlpha = 1
 
+  context.fillStyle = 'rgba(24,39,55,.88)'
+  context.beginPath()
+  context.roundRect(WIDTH / 2 - 105, 12, 210, 82, 13)
+  context.fill()
+  context.fillStyle = '#ffffff'
+  context.font = '900 44px system-ui, sans-serif'
+  context.textAlign = 'center'
+  context.fillText(`${match.score[0]}  :  ${match.score[1]}`, WIDTH / 2, 61)
+  context.fillStyle = '#cbdfbd'
+  context.font = '750 10px system-ui, sans-serif'
+  context.fillText(matchLabel, WIDTH / 2, 81)
+
   if (match.resetTimer > 0) {
     context.save()
     context.globalAlpha = Math.min(1, match.resetTimer * 2)
@@ -319,14 +340,6 @@ function addBurst(match: Match, x: number, y: number, color: string, count: numb
     const speed = 85 + (index % 3) * 45
     match.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 25, life: 0.34, duration: 0.34, color })
   }
-}
-
-function limitBallSpeed(ball: Ball) {
-  const speed = Math.hypot(ball.vx, ball.vy)
-  const maxSpeed = 1050
-  if (speed <= maxSpeed) return
-  ball.vx = ball.vx / speed * maxSpeed
-  ball.vy = ball.vy / speed * maxSpeed
 }
 
 function readName(key: string, fallback: string) {
@@ -363,7 +376,7 @@ export function Game({ locale }: GameProps) {
     start: 'Rozpocznij mecz', resume: 'Wznów mecz', rematch: 'Rewanż', save: 'Zapisz wynik',
     history: 'HISTORIA MECZÓW', empty: 'Zapisane wyniki pojawią się tutaj.', local: 'ZAPISANO NA TYM URZĄDZENIU',
     p1Controls: 'GRACZ 1', p2Controls: 'GRACZ 2', move: 'RUCH', jump: 'SKOK', kick: 'STRZAŁ', low: 'NISKO',
-    aimHintBot: 'Q: LOB · S: NISKO · PRZYTRZYMAJ STRZAŁ DLA MOCY, PUŚĆ BY UDERZYĆ', aimHintLocal: 'P1: W + SPACJA LOB · S + SPACJA NISKO  |  P2: ↑ + ENTER LOB · ↓ + ENTER NISKO',
+    aimHintBot: 'Q: LOB · S: NISKO · PRZYTRZYMAJ STRZAŁ DLA MOCY, PUŚĆ BY UDERZYĆ', aimHintLocal: 'P1: Q LOB · S NISKO | P2: SHIFT LOB · ↓ NISKO · PUŚĆ STRZAŁ BY UDERZYĆ',
     touchAimHintBot: '↑ skacze · ⌒ celuje lobem · ↓ nisko. Przytrzymaj i puść STRZAŁ dla mocy.', touchAimHintLocal: '↑ skacze · ⌒ celuje lobem · ↓ nisko. Przytrzymaj i puść STRZAŁ dla mocy.',
   } : {
     mode: 'MODE', botMode: 'Vs bot', localMode: '2 players', level: 'CHOOSE AN ARENA', kickoff: 'FIRST TO 3 GOALS',
@@ -378,19 +391,33 @@ export function Game({ locale }: GameProps) {
     start: 'Start match', resume: 'Resume match', rematch: 'Rematch', save: 'Save result',
     history: 'MATCH HISTORY', empty: 'Saved results will show up here.', local: 'SAVED ON THIS DEVICE',
     p1Controls: 'PLAYER 1', p2Controls: 'PLAYER 2', move: 'MOVE', jump: 'JUMP', kick: 'KICK', low: 'LOW',
-    aimHintBot: 'Q: LOB · S: LOW · HOLD KICK FOR POWER, RELEASE TO SHOOT', aimHintLocal: 'P1: W + SPACE LOB · S + SPACE LOW  |  P2: ↑ + ENTER LOB · ↓ + ENTER LOW',
+    aimHintBot: 'Q: LOB · S: LOW · HOLD KICK FOR POWER, RELEASE TO SHOOT', aimHintLocal: 'P1: Q LOB · S LOW | P2: SHIFT LOB · ↓ LOW · RELEASE KICK TO SHOOT',
     touchAimHintBot: '↑ jumps · ⌒ aims a lob · ↓ aims low. Hold and release KICK for power.', touchAimHintLocal: '↑ jumps · ⌒ aims a lob · ↓ aims low. Hold and release KICK for power.',
   }
 
   const fallbackP1 = copy.player(1)
   const fallbackP2 = copy.player(2)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRevision = useCanvasResolution(canvasRef, WIDTH, HEIGHT)
   const [initialScene] = useState(createMatch)
   const matchRef = useRef(initialScene)
   const inputRef = useRef({ p1Left: false, p1Right: false, p1Jump: false, p1AimUp: false, p1AimDown: false, p1Kick: false, p1KickHeld: false, p2Left: false, p2Right: false, p2Jump: false, p2AimUp: false, p2AimDown: false, p2Kick: false, p2KickHeld: false })
   const [mode, setMode] = useState<Mode>('bot')
-  const [level, setLevel] = useState<LevelId>('practice')
-  const [difficulty, setDifficulty] = useState<BotDifficulty>('club')
+  const [selectedLevel, setLevel] = useState<LevelId>('practice')
+  const [selectedDifficulty, setDifficulty] = useState<BotDifficulty>('club')
+  const [format, setFormat] = useState<'arcade' | 'quick'>('arcade')
+  const [career, setCareer] = useState(createCareer)
+  const [roundProfile, setRoundProfile] = useState(() => opponentFor(createCareer()))
+  const [resumeAvailable, setResumeAvailable] = useState(false)
+  const checkpointRef = useRef<CareerCheckpoint | null>(null)
+  const [arcadeRecords, setArcadeRecords] = useState<CareerRecord[]>([])
+  const [runBest, setRunBest] = useState(0)
+  const [matchTarget, setMatchTarget] = useState(5)
+  const arcade = mode === 'bot' && format === 'arcade'
+  const level = arcade ? roundProfile.arena : selectedLevel
+  const difficulty = arcade ? roundProfile.difficulty : selectedDifficulty
+  const targetGoals = arcade ? roundProfile.targetGoals : matchTarget
+  const matchLabel = `${arcade ? `${locale === 'pl' ? 'MECZ' : 'MATCH'} ${roundProfile.number} · ` : ''}${locale === 'pl' ? 'DO' : 'FIRST TO'} ${targetGoals}`
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready')
   const [score, setScore] = useState<[number, number]>([0, 0])
   const [wind, setWind] = useState(0)
@@ -398,8 +425,52 @@ export function Game({ locale }: GameProps) {
   const [p2Name, setP2Name] = useState(fallbackP2)
   const [records, setRecords] = useState<MatchRecord[]>([])
   const [saved, setSaved] = useState(false)
-  useEffect(() => { if (status === 'over') saveScore() }, [status])
-  useGameSession(status, setStatus, startMatch)
+  const [series, setSeries] = useState<[number, number]>([0, 0])
+  const { audio, enabled: soundEnabled, toggle: toggleSound } = useGameAudio(status)
+  useEffect(() => {
+    if (status !== 'over') return
+    saveScore()
+    setSeries((current) => score[0] > score[1] ? [current[0] + 1, current[1]] : [current[0], current[1] + 1])
+    if (!arcade) return
+    const next = finishCareerMatch(career, score)
+    setCareer(next)
+    const checkpoint: CareerCheckpoint = { career: next, score, completed: true }
+    checkpointRef.current = checkpoint
+    if (next.losses < 3) writeCareerCheckpoint(checkpoint)
+    else {
+      clearCareerCheckpoint()
+      checkpointRef.current = null
+      const name = p1Name.trim() || fallbackP1
+      const records = [...arcadeRecords, { name, score: next.points, wins: next.wins, goals: next.goalsFor }].sort((first, second) => second.score - first.score).slice(0, 5)
+      if (writeCareerRecords(records)) { setArcadeRecords(records); setSaved(true) }
+    }
+  }, [status])
+  useEffect(() => {
+    if (!arcade || (status !== 'playing' && status !== 'paused')) return
+    const checkpoint: CareerCheckpoint = { career, score, completed: false }
+    checkpointRef.current = checkpoint
+    writeCareerCheckpoint(checkpoint)
+  }, [arcade, career, score, status])
+  useGameSession(status, setStatus, startMatch, canvasRef)
+
+  useEffect(() => {
+    if (!arcade) return
+    const checkpoint = readCareerCheckpoint()
+    const records = readCareerRecords()
+    setArcadeRecords(records)
+    setRunBest(records[0]?.score ?? 0)
+    checkpointRef.current = checkpoint
+    setResumeAvailable(checkpoint !== null)
+    if (checkpoint) {
+      setCareer(checkpoint.career)
+      setRoundProfile(opponentFor(checkpoint.career))
+      if (!checkpoint.completed) {
+        matchRef.current = createMatch()
+        matchRef.current.score = [...checkpoint.score]
+        setScore([...checkpoint.score])
+      }
+    }
+  }, [arcade])
 
   useEffect(() => {
     setP1Name(readName('playcove.soccer-duel.player-1', fallbackP1))
@@ -415,7 +486,7 @@ export function Game({ locale }: GameProps) {
     const match = matchRef.current
 
     if (status !== 'playing') {
-      drawScene(drawingContext, match, level, performance.now(), copy.goal)
+      drawScene(drawingContext, match, level, performance.now(), copy.goal, matchLabel)
       return
     }
 
@@ -499,15 +570,16 @@ export function Game({ locale }: GameProps) {
         botTimer = settings.reaction
         const predicted = ball.x + ball.vx * settings.reaction * 0.5
         const error = Math.sin(match.elapsed * 2.3) * settings.accuracy
-        botTarget = Math.max(WIDTH * 0.25, Math.min(WIDTH - 76, predicted + 52 + error))
+        const defending = arcade && roundProfile.style === 'keeper' && ball.x < WIDTH * 0.58
+        botTarget = defending ? WIDTH * 0.8 : Math.max(WIDTH * 0.25, Math.min(WIDTH - 76, predicted + 52 + error))
         botJump = Math.abs(ball.x - player.x) < 110 && ball.y < GROUND - 100 && ball.y > GROUND - 260
         const opponent = match.players[0]
-        player.aim = opponent.x < player.x && player.x - opponent.x < 180 && opponent.grounded ? 'lob' : !opponent.grounded ? 'ground' : 'drive'
+        player.aim = arcade && roundProfile.style === 'lobber' ? 'lob' : arcade && roundProfile.style === 'striker' && !opponent.grounded ? 'ground' : opponent.x < player.x && player.x - opponent.x < 180 && opponent.grounded ? 'lob' : !opponent.grounded ? 'ground' : 'drive'
         kick = ball.x < player.x + 5 && ballInKickRange(ball, player)
         if (kick) player.charge = difficulty === 'pro' ? 0.8 : 0.3
       }
       const direction = Math.abs(botTarget - player.x) < 12 ? 0 : Math.sign(botTarget - player.x)
-      applyPlayerInput(player, direction < 0, direction > 0, botJump && player.grounded, delta, settings.speed)
+      applyPlayerInput(player, direction < 0, direction > 0, botJump && player.grounded, delta, settings.speed * (arcade && roundProfile.style === 'chaser' ? 1.06 : 1))
       player.facing = ball.x < player.x ? -1 : 1
       return kick
 
@@ -527,35 +599,6 @@ export function Game({ locale }: GameProps) {
       second.x = Math.min(WIDTH - 67, second.x)
     }
 
-    function collideBallWithPlayer(ball: Ball, player: Player) {
-      const nearestX = Math.max(player.x - PLAYER_WIDTH / 2, Math.min(player.x + PLAYER_WIDTH / 2, ball.x))
-      const nearestY = Math.max(player.y + 4, Math.min(player.y + PLAYER_HEIGHT - 3, ball.y))
-      let dx = ball.x - nearestX
-      let dy = ball.y - nearestY
-      const distance = Math.hypot(dx, dy)
-      if (distance >= BALL_RADIUS) return
-      if (distance < 0.001) {
-        dx = player.facing
-        dy = -0.35
-      }
-      const normalLength = Math.hypot(dx, dy)
-      const normalX = dx / normalLength
-      const normalY = dy / normalLength
-      ball.x = nearestX + normalX * (BALL_RADIUS + 0.5)
-      ball.y = nearestY + normalY * (BALL_RADIUS + 0.5)
-      const relativeVX = ball.vx - player.vx
-      const relativeVY = ball.vy - player.vy
-      const normalSpeed = relativeVX * normalX + relativeVY * normalY
-      if (normalSpeed < 0) {
-        ball.vx -= 1.65 * normalSpeed * normalX
-        ball.vy -= 1.65 * normalSpeed * normalY
-      }
-      ball.vx += player.vx * 0.12
-      ball.vy += player.vy * 0.12
-      if (ball.vy > -75 && normalY < -0.25) ball.vy = -75
-      limitBallSpeed(ball)
-    }
-
     function kickBall(player: Player, ball: Ball, requested: boolean, color: string) {
       if (requested) player.kickBuffer = 0.2
       if (player.kickBuffer <= 0 || player.kickCooldown > 0) return
@@ -564,9 +607,10 @@ export function Game({ locale }: GameProps) {
       const footY = player.y + 56
       if (!ballInKickRange(ball, player)) return
 
+      audio.play('hit')
       const profile = shotProfile(player)
       ball.x = player.x + player.facing * (PLAYER_WIDTH / 2 + BALL_RADIUS + 2)
-      ball.vx = player.facing * profile.horizontal + player.vx * 0.35
+      ball.vx = player.facing * profile.horizontal + player.vx * 0.18
       ball.vy = profile.vertical
       ball.kickFlash = 0.16
       player.kickTimer = 0.2
@@ -636,37 +680,22 @@ export function Game({ locale }: GameProps) {
         }
         collidePlayers(first, second)
 
-        const windForce = windAt(match.elapsed * 1000, level)
-        ball.vx += windForce * delta
-        ball.vy += GRAVITY * 0.56 * delta
-        ball.x += ball.vx * delta
-        ball.y += ball.vy * delta
-
-        if (ball.y < 24 + BALL_RADIUS) {
-          ball.y = 24 + BALL_RADIUS
-          ball.vy = Math.abs(ball.vy) * 0.72
-        }
-        if (ball.y + BALL_RADIUS > GROUND) {
-          ball.y = GROUND - BALL_RADIUS
-          if (Math.abs(ball.vy) > 95) ball.vy = -Math.abs(ball.vy) * 0.67
-          else ball.vy = 0
-          ball.vx *= Math.exp(-1.5 * delta)
-        }
-
-        collideBallWithPlayer(ball, first)
-        collideBallWithPlayer(ball, second)
+        const previousBall = integrateBall(ball, delta, windAt(match.elapsed * 1000, level))
+        collidePlayer(ball, first)
+        collidePlayer(ball, second)
+        if (collideGoalFrames(ball)) audio.play('hit')
         kickBall(first, ball, p1Kick, '#ffb08e')
         kickBall(second, ball, mode === 'bot' ? botKick : p2Kick, '#b2c1ff')
+        if (!inputRef.current.p1KickHeld && first.kickBuffer === 0) first.charge = 0
+        if (!inputRef.current.p2KickHeld && second.kickBuffer === 0) second.charge = 0
 
-        const insideGoalHeight = ball.y >= GOAL_TOP - BALL_RADIUS && ball.y < GROUND - BALL_RADIUS + 2
-        const scoredOnLeft = ball.x < GOAL_INSET + GOAL_WIDTH && insideGoalHeight
-        const scoredOnRight = ball.x > WIDTH - GOAL_INSET - GOAL_WIDTH && insideGoalHeight
-        if (scoredOnLeft || scoredOnRight) {
-          const scorer = scoredOnLeft ? 1 : 0
+        const scorer = goalScorer(previousBall, ball)
+        if (scorer !== null) {
+          audio.play('point')
           match.score[scorer] += 1
           setScore([match.score[0], match.score[1]])
           addBurst(match, ball.x, ball.y, '#fff0a8', 24)
-          if (match.score[scorer] >= WIN_SCORE) {
+          if (match.score[scorer] >= targetGoals) {
             setStatus('over')
             matchEnded = true
           } else {
@@ -687,7 +716,7 @@ export function Game({ locale }: GameProps) {
 
       if (matchEnded) break
       }
-      drawScene(drawingContext, match, level, time, copy.goal)
+      drawScene(drawingContext, match, level, time, copy.goal, matchLabel)
       if (time - previousWindUpdate > 180) {
         setWind(Math.round(windAt(match.elapsed * 1000, level)))
         previousWindUpdate = time
@@ -704,18 +733,34 @@ export function Game({ locale }: GameProps) {
       window.removeEventListener('keyup', handleKeyUp)
       inputRef.current = { p1Left: false, p1Right: false, p1Jump: false, p1AimUp: false, p1AimDown: false, p1Kick: false, p1KickHeld: false, p2Left: false, p2Right: false, p2Jump: false, p2AimUp: false, p2AimDown: false, p2Kick: false, p2KickHeld: false }
     }
-  }, [copy.goal, difficulty, level, mode, status])
+  }, [arcade, copy.goal, difficulty, level, mode, roundProfile.style, status, targetGoals, matchLabel, canvasRevision])
 
   function startMatch() {
-    matchRef.current = createMatch()
-    setScore([0, 0])
+    const match = createMatch()
+    if (arcade) {
+      const checkpoint = status === 'ready' && resumeAvailable ? checkpointRef.current : null
+      const next = checkpoint ? checkpoint.career : status === 'over' && career.losses < 3 ? career : createCareer()
+      setCareer(next)
+      setRoundProfile(opponentFor(next))
+      if (checkpoint && !checkpoint.completed) match.score = [...checkpoint.score]
+      if (next.wins + next.losses === 0) setRunBest(arcadeRecords[0]?.score ?? 0)
+      setResumeAvailable(false)
+    }
+    matchRef.current = match
+    setScore([...match.score])
     setWind(0)
     setSaved(false)
     setStatus('playing')
   }
 
+  function chooseFormat(next: 'arcade' | 'quick') {
+    setFormat(next)
+    selectMode('bot')
+  }
+
   function selectMode(nextMode: Mode) {
     setMode(nextMode)
+    setResumeAvailable(nextMode === 'bot' && format === 'arcade' && checkpointRef.current !== null)
     matchRef.current = createMatch()
     setScore([0, 0])
     setSaved(false)
@@ -734,9 +779,9 @@ export function Game({ locale }: GameProps) {
   function saveScore() {
     if (saved) return
     const firstName = p1Name.trim() || fallbackP1
-    const secondName = mode === 'bot' ? copy.bot : p2Name.trim() || fallbackP2
+    const secondName = mode === 'bot' ? arcade ? roundProfile.names[locale] : copy.bot : p2Name.trim() || fallbackP2
     const winner = score[0] > score[1] ? firstName : secondName
-    const next = [{ winner, final: `${score[0]}–${score[1]}`, level: copy.levels[level].name, mode: mode === 'bot' ? copy.botMode : copy.localMode }, ...records].slice(0, 5)
+    const next = [{ winner, final: `${score[0]}–${score[1]}`, level: copy.levels[level].name, mode: arcade ? locale === 'pl' ? 'Bieg arcade' : 'Arcade run' : mode === 'bot' ? copy.botMode : copy.localMode }, ...records].slice(0, 5)
     try {
       localStorage.setItem('playcove.soccer-duel.player-1', firstName)
       localStorage.setItem('playcove.soccer-duel.player-2', p2Name.trim() || fallbackP2)
@@ -753,28 +798,36 @@ export function Game({ locale }: GameProps) {
   }
 
   const firstName = p1Name.trim() || fallbackP1
-  const secondName = mode === 'bot' ? copy.bot : p2Name.trim() || fallbackP2
+  const secondName = mode === 'bot' ? arcade ? roundProfile.names[locale] : copy.bot : p2Name.trim() || fallbackP2
   const winner = score[0] > score[1] ? firstName : secondName
   const canChangeSetup = status !== 'playing' && status !== 'paused'
   const windText = wind === 0 ? copy.levels[level].wind : `${copy.wind} ${wind > 0 ? '→' : '←'} ${Math.abs(wind)}`
+  const nextOpponent = opponentFor(career)
+  const runOver = arcade && career.losses >= 3
+  const roundWon = score[0] > score[1]
+  const resultTitle = arcade ? runOver ? locale === 'pl' ? 'Koniec biegu arcade' : 'Arcade run complete' : locale === 'pl' ? roundWon ? 'Mecz wygrany!' : 'Mecz przegrany' : roundWon ? 'Match won!' : 'Match lost' : `${winner} ${locale === 'pl' ? 'wygrywa!' : 'wins!'}`
+  const readyTitle = arcade ? locale === 'pl' ? resumeAvailable ? 'Kontynuować bieg?' : 'Ile pucharów zdobędziesz?' : resumeAvailable ? 'Continue your run?' : 'How many cups can you win?' : copy.ready
+  const readyDetail = arcade ? locale === 'pl' ? 'Kolejne drużyny, zmienne boiska, silniejsi rywale. Co 5 zwycięstw puchar. Bieg kończy się po 3 porażkach; postęp zapisuje się po każdym golu.' : 'New teams, changing arenas, tougher opponents. Every 5 wins earns a cup. Three match losses end the run; every goal is saved locally.' : copy.readyDetail
+  const resultDetail = arcade ? runOver ? locale === 'pl' ? `${career.goalsFor} goli, ${career.wins} zwycięstw. Najlepsza seria: ${career.bestStreak}.` : `${career.goalsFor} goals, ${career.wins} wins. Best winning streak: ${career.bestStreak}.` : locale === 'pl' ? `Pozostałe szanse: ${3 - career.losses}. Następny rywal: ${nextOpponent.names.pl} · ${copy.levels[nextOpponent.arena].name}.` : `${3 - career.losses} losses left. Next: ${nextOpponent.names.en} · ${copy.levels[nextOpponent.arena].name}.` : locale === 'pl' ? 'Rewanż zachowuje wynik serii. Lobuj nad obrońcą albo strzelaj nisko pod wyskokiem.' : 'A rematch keeps the series tally. Lob over a defender or drive low under a jump.'
+  const actionLabel = status === 'paused' ? copy.resume : arcade ? status === 'over' ? runOver ? locale === 'pl' ? 'Nowy bieg' : 'New run' : locale === 'pl' ? 'Następny mecz' : 'Next match' : resumeAvailable ? locale === 'pl' ? 'Kontynuuj bieg' : 'Continue run' : locale === 'pl' ? 'Rozpocznij bieg' : 'Start arcade run' : status === 'over' ? copy.rematch : copy.start
 
-  return (
-    <div className={`module-game soccer-game${status === 'playing' ? ' is-playing' : ''}`}>
-      <div className="module-game-main">
-        <div className="module-game-heading">
-          <div><span className="game-small-label">{copy.kickoff}</span><h2>{copy.heading}</h2></div>
-          <div className="soccer-scoreline"><span>{firstName}</span><strong>{score[0]} <i>:</i> {score[1]}</strong><span>{secondName}</span></div>
-        </div>
-
+  const setup = (
         <section className="soccer-setup" aria-label={copy.level}>
           <div className="soccer-setup-row">
             <span className="soccer-setup-label">{copy.mode}</span>
             <div className="soccer-mode-options">
-              <button className={mode === 'bot' ? 'soccer-choice is-active' : 'soccer-choice'} onClick={() => selectMode('bot')} disabled={!canChangeSetup} aria-pressed={mode === 'bot'}>{copy.botMode}</button>
+              <button className={arcade ? 'soccer-choice is-active' : 'soccer-choice'} onClick={() => chooseFormat('arcade')} disabled={!canChangeSetup} aria-pressed={arcade}>{locale === 'pl' ? 'Bieg arcade' : 'Arcade run'}</button>
+              <button className={mode === 'bot' && !arcade ? 'soccer-choice is-active' : 'soccer-choice'} onClick={() => chooseFormat('quick')} disabled={!canChangeSetup} aria-pressed={mode === 'bot' && !arcade}>{locale === 'pl' ? 'Szybki mecz' : 'Quick match'}</button>
               <button className={mode === 'local' ? 'soccer-choice is-active' : 'soccer-choice'} onClick={() => selectMode('local')} disabled={!canChangeSetup} aria-pressed={mode === 'local'}>{copy.localMode}</button>
             </div>
           </div>
-          {mode === 'bot' && <div className="soccer-setup-row"><span className="soccer-setup-label">{locale === 'pl' ? 'POZIOM BOTA' : 'BOT LEVEL'}</span><div className="soccer-mode-options">{(['casual', 'club', 'pro'] satisfies BotDifficulty[]).map((id) => <button key={id} className={difficulty === id ? 'soccer-choice is-active' : 'soccer-choice'} disabled={!canChangeSetup} aria-pressed={difficulty === id} onClick={() => setDifficulty(id)}>{id === 'casual' ? locale === 'pl' ? 'Spokojny' : 'Casual' : id === 'club' ? locale === 'pl' ? 'Klubowy' : 'Club' : 'Pro'}</button>)}</div></div>}
+          {mode === 'bot' && !arcade && <div className="soccer-setup-row"><span className="soccer-setup-label">{locale === 'pl' ? 'POZIOM BOTA' : 'BOT LEVEL'}</span><div className="soccer-mode-options">{(['casual', 'club', 'pro'] satisfies BotDifficulty[]).map((id) => <button key={id} className={difficulty === id ? 'soccer-choice is-active' : 'soccer-choice'} disabled={!canChangeSetup} aria-pressed={difficulty === id} onClick={() => setDifficulty(id)}>{id === 'casual' ? locale === 'pl' ? 'Spokojny' : 'Casual' : id === 'club' ? locale === 'pl' ? 'Klubowy' : 'Club' : 'Pro'}</button>)}</div></div>}
+          {arcade ? <div className="soccer-campaign-panel">
+            <div><span>{locale === 'pl' ? 'PUCHAR' : 'CUP'} {Math.floor(career.wins / 5) + 1}</span><strong>{career.points.toLocaleString(locale)} {locale === 'pl' ? 'PKT' : 'PTS'}</strong><b aria-label={locale === 'pl' ? 'Pozostałe szanse' : 'Losses remaining'}>{'♥'.repeat(Math.max(0, 3 - career.losses))}{'♡'.repeat(Math.min(3, career.losses))}</b></div>
+            <div className="soccer-cup-progress" aria-label={locale === 'pl' ? 'Zwycięstwa do pucharu' : 'Wins toward next cup'}>{Array.from({ length: 5 }, (_, index) => <i key={index} className={index < career.wins % 5 ? 'is-earned' : ''} />)}</div>
+            <p>{career.wins} {locale === 'pl' ? 'zwycięstw · kolejne zmiany' : 'wins · next challenge'}: {copy.levels[(status === 'over' ? nextOpponent : roundProfile).arena].name} · {locale === 'pl' ? 'postęp zapisuje się automatycznie' : 'progress saves automatically'}</p>
+          </div> : <>
+          <div className="soccer-setup-row"><span className="soccer-setup-label">{locale === 'pl' ? 'GOLE DO WYGRANEJ' : 'GOALS TO WIN'}</span><div className="soccer-mode-options">{[3, 5, 7].map((target) => <button key={target} className={matchTarget === target ? 'soccer-choice is-active' : 'soccer-choice'} disabled={!canChangeSetup} aria-pressed={matchTarget === target} onClick={() => { setMatchTarget(target); setStatus('ready'); setScore([0, 0]); matchRef.current = createMatch() }}>{target}</button>)}</div></div>
           <div className="soccer-level-grid">
             {LEVEL_IDS.map((id) => (
               <button className={level === id ? 'soccer-level is-active' : 'soccer-level'} onClick={() => selectLevel(id)} disabled={!canChangeSetup} aria-pressed={level === id} key={id}>
@@ -782,12 +835,41 @@ export function Game({ locale }: GameProps) {
               </button>
             ))}
           </div>
+          </>}
+          <div className="soccer-menu-controls"><span><kbd>A</kbd><kbd>D</kbd> {copy.move} · <kbd>W</kbd> {copy.jump}</span><span><kbd>Q</kbd> LOB · <kbd>S</kbd> {copy.low} · <kbd>SPACE</kbd> {copy.kick}</span></div>
         </section>
+  )
 
-        <div className="soccer-matchbar"><span>{mode === 'bot' ? `${firstName} vs ${copy.bot}` : `${firstName} vs ${secondName}`}{status === 'playing' && <button onClick={() => setStatus('paused')}>{copy.pause}</button>}</span><strong>{windText}</strong></div>
+  return (
+    <div className={`module-game soccer-game${status === 'playing' ? ' is-playing' : ''}`}>
+      <div className="module-game-main">
+
+
+
+
         <div className="canvas-wrap soccer-canvas-wrap">
-          <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Boisko do gry Soccer Duel' : 'Soccer Duel side-view arena'} />
-          <GameOverlay status={status} locale={locale} title={status === 'over' ? `${winner} ${locale === 'pl' ? 'wygrywa!' : 'wins!'}` : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Zmień tor strzału: lob nad rywalem albo niski strzał pod wyskokiem.' : 'Change the shot: lob over a defender or drive low under a jump.') : copy.readyDetail} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.rematch : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startMatch} result={{ value: `${score[0]}–${score[1]}`, label: `${winner} ${locale === 'pl' ? 'wygrywa!' : 'wins!'}`, saved, stats: [{ label: copy.level, value: copy.levels[level].name }, { label: copy.mode, value: mode === 'bot' ? copy.botMode : copy.localMode }] }} />
+        <div className="module-game-heading game-frame-bar">
+          <div><span className="game-small-label">{arcade ? `${locale === 'pl' ? 'MECZ' : 'MATCH'} ${roundProfile.number} · ${targetGoals} ${locale === 'pl' ? 'GOLI' : 'GOALS'}` : `${targetGoals} ${locale === 'pl' ? 'GOLI' : 'GOALS'}`}</span><h2>SOCCER DUEL</h2></div>
+          <div className="soccer-scoreline"><span>{firstName}</span><strong>{score[0]} <i>:</i> {score[1]}</strong><span>{secondName}</span><small className="game-series-score">{locale === 'pl' ? 'SERIA' : 'SERIES'} {series[0]}–{series[1]}</small></div>
+        </div>
+          <canvas tabIndex={0} ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Boisko do gry Soccer Duel' : 'Soccer Duel side-view arena'} />
+        <div className="soccer-matchbar"><span>{`${firstName} vs ${secondName}`}</span><strong>{windText}</strong></div>
+          <SoundToggle locale={locale} enabled={soundEnabled} onToggle={toggleSound} onPause={status === 'playing' ? () => setStatus('paused') : undefined} />
+          <GamePanel locale={locale} onOpen={() => { if (status === 'playing') setStatus('paused') }}>
+      <aside className="game-scoreboard soccer-scoreboard">
+        <div className="scoreboard-heading"><span className="game-small-label">{arcade ? locale === 'pl' ? 'NAJLEPSZE BIEGI' : 'BEST ARCADE RUNS' : copy.history}</span><span className="scoreboard-star">✳</span></div>
+        <label className="game-field"><span>{copy.name(1)}</span><input value={p1Name} maxLength={14} onChange={(event) => setP1Name(event.target.value)} /></label>
+        {mode === 'local' && <label className="game-field"><span>{copy.name(2)}</span><input value={p2Name} maxLength={14} onChange={(event) => setP2Name(event.target.value)} /></label>}
+        <div className="scoreboard-rule" />
+        <div className="scoreboard-list">
+          {arcade ? arcadeRecords.length ? arcadeRecords.map((record, index) => <div className="scoreboard-row" key={`${record.name}-${record.score}-${index}`}><span className="score-rank">{index + 1}</span><span className="score-name">{record.name}<small>{record.wins} {locale === 'pl' ? 'zwycięstw' : 'wins'}</small></span><strong>{record.score}</strong></div>) : <p className="scoreboard-empty">{locale === 'pl' ? 'Ukończ bieg, by zapisać pierwszy wynik.' : 'Complete a run to set the first record.'}</p> : records.length ? records.map((record, index) => (
+            <div className="match-log-row" key={`${record.winner}-${record.final}-${index}`}><span className="match-log-rank">{String(index + 1).padStart(2, '0')}</span><span><strong>{record.winner}</strong><small>{record.level} · {record.mode}</small></span><b>{record.final}</b></div>
+          )) : <p className="scoreboard-empty">{copy.empty}</p>}
+        </div>
+        <div className="scoreboard-foot">{copy.local}</div>
+      </aside>
+          </GamePanel>
+          <GameOverlay settings={status === 'ready' || (status === 'paused' && !arcade) ? setup : undefined} gameName="SOCCER DUEL" onRestart={arcade ? undefined : startMatch} status={status} locale={locale} title={status === 'over' ? resultTitle : status === 'paused' ? copy.paused : readyTitle} description={status === 'over' ? resultDetail : readyDetail} actionLabel={actionLabel} onAction={status === 'paused' ? () => setStatus('playing') : startMatch} actionHint={arcade && status === 'over' && !runOver ? locale === 'pl' ? 'SPACJA / ENTER · następny mecz' : 'SPACE / ENTER · next match' : undefined} result={{ value: runOver ? career.points : `${score[0]}–${score[1]}`, label: runOver ? locale === 'pl' ? 'PUNKTY BIEGU' : 'RUN POINTS' : resultTitle, ...(runOver ? { score: career.points, best: runBest } : {}), saved, stats: arcade ? [{ label: locale === 'pl' ? 'ZWYCIĘSTWA' : 'WINS', value: career.wins }, { label: locale === 'pl' ? 'PUNKTY BIEGU' : 'RUN POINTS', value: career.points }, { label: locale === 'pl' ? 'SZANSE' : 'LIVES', value: Math.max(0, 3 - career.losses) }] : [{ label: locale === 'pl' ? 'BOISKO' : 'ARENA', value: copy.levels[level].name }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(matchRef.current.elapsed)}s` }, { label: locale === 'pl' ? 'SERIA' : 'SERIES', value: `${series[0]}–${series[1]}` }] }} />
         </div>
 
         <div className="module-controls-caption soccer-keyboard-controls">
@@ -819,18 +901,7 @@ export function Game({ locale }: GameProps) {
         </div>
       </div>
 
-      <aside className="game-scoreboard soccer-scoreboard">
-        <div className="scoreboard-heading"><span className="game-small-label">{copy.history}</span><span className="scoreboard-star">✳</span></div>
-        <label className="game-field"><span>{copy.name(1)}</span><input value={p1Name} maxLength={14} onChange={(event) => setP1Name(event.target.value)} /></label>
-        {mode === 'local' && <label className="game-field"><span>{copy.name(2)}</span><input value={p2Name} maxLength={14} onChange={(event) => setP2Name(event.target.value)} /></label>}
-        <div className="scoreboard-rule" />
-        <div className="scoreboard-list">
-          {records.length ? records.map((record, index) => (
-            <div className="match-log-row" key={`${record.winner}-${record.final}-${index}`}><span className="match-log-rank">{String(index + 1).padStart(2, '0')}</span><span><strong>{record.winner}</strong><small>{record.level} · {record.mode}</small></span><b>{record.final}</b></div>
-          )) : <p className="scoreboard-empty">{copy.empty}</p>}
-        </div>
-        <div className="scoreboard-foot">{copy.local}</div>
-      </aside>
+
     </div>
   )
 }

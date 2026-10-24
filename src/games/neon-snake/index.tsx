@@ -3,17 +3,17 @@ import type { GameManifest } from '../contract.ts'
 export const manifest = {
   en: {
     slug: 'neon-snake', name: 'Neon Snake', description: 'Guide the snake, grab glowing fruit, and see how long your run can grow.',
-    genreSlug: 'arcade', players: '1 player', playTime: 'Endless', accent: 'lime', controls: 'Move with the arrow keys or W / A / S / D. On touchscreens, use the direction pad below the board.',
+    genreSlug: 'arcade', players: '1 player', playTime: '15+ min', accent: 'lime', controls: 'Move with the arrow keys or W / A / S / D. On touchscreens, use the direction pad below the board.',
   },
   pl: {
     slug: 'neon-snake', name: 'Neon Snake', description: 'Prowadź węża, zbieraj świecące owoce i sprawdź, jak długa będzie twoja seria.',
-    genreSlug: 'arcade', players: '1 gracz', playTime: 'Bez końca', accent: 'lime', controls: 'Poruszaj się strzałkami lub klawiszami W / A / S / D. Na ekranie dotykowym użyj pada pod planszą.',
+    genreSlug: 'arcade', players: '1 gracz', playTime: '15+ min', accent: 'lime', controls: 'Poruszaj się strzałkami lub klawiszami W / A / S / D. Na ekranie dotykowym użyj pada pod planszą.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 
 export function Miniature() {
   return (
-    <svg viewBox="0 0 400 260" role="img" aria-label="Glowing green snake chasing fruit">
+    <svg preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 260" role="img" aria-label="Glowing green snake chasing fruit">
       <defs>
         <linearGradient id="snake-art-bg" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#122d39" /><stop offset="1" stopColor="#1b604e" /></linearGradient>
       </defs>

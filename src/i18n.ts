@@ -13,8 +13,8 @@ const messages = {
   en: {
     navGames: 'Games', navArcade: 'Arcade', navSports: 'Sports', navTwoPlayer: '2 players',
     language: 'Language', languageNames: { en: 'English', pl: 'Polski' },
-    homeTitle: 'Arcade games,\nready to play.',
-    homeDescription: 'Free browser games for one player or two on the same keyboard.',
+    homeTitle: 'Arcade.',
+    homeDescription: 'Play solo or with a friend on the same keyboard.',
     homeAction: 'Browse games',
     featured: 'FEATURED GAME', play: 'Play game',
     categories: 'Browse by type', allGames: 'All games', searchLabel: 'Search games', searchPlaceholder: 'Search titles or types',
@@ -29,8 +29,8 @@ const messages = {
   pl: {
     navGames: 'Gry', navArcade: 'Arcade', navSports: 'Sport', navTwoPlayer: '2 graczy',
     language: 'Język', languageNames: { en: 'English', pl: 'Polski' },
-    homeTitle: 'Gry arcade.\nOd razu do gry.',
-    homeDescription: 'Darmowe gry w przeglądarce dla jednej lub dwóch osób przy jednej klawiaturze.',
+    homeTitle: 'Arcade.',
+    homeDescription: 'Graj solo lub z drugą osobą na jednej klawiaturze.',
     homeAction: 'Zobacz gry',
     featured: 'POLECANA GRA', play: 'Graj',
     categories: 'Kategorie', allGames: 'Wszystkie gry', searchLabel: 'Szukaj gier', searchPlaceholder: 'Wpisz tytuł lub kategorię',

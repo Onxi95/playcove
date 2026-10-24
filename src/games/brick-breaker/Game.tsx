@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
+import { useCanvasResolution } from '../kit/use-canvas-resolution.ts'
 import { GameOverlay } from '../kit/GameOverlay.tsx'
+import { GamePanel } from '../kit/GamePanel.tsx'
+import { SoundToggle } from '../kit/SoundToggle.tsx'
+import { useGameAudio } from '../kit/use-game-audio.ts'
 import { createBricks, paddleReturn } from './mechanics.ts'
 
 type Brick = { x: number; y: number; color: string; hits: number; alive: boolean }
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; duration: number; color: string }
 type BoostType = 'wide' | 'slow' | 'fire'
 type BoostDrop = { x: number; y: number; vy: number; type: BoostType }
-type Scene = { serveTimer: number; pointerX: number | null; ballX: number; ballY: number; ballVX: number; ballVY: number; ballSpeed: number; paddleX: number; paddleWidth: number; paddleBaseWidth: number; bricks: Brick[]; wave: number; lives: number; combo: number; paddleFlash: number; particles: Particle[]; drops: BoostDrop[]; boost: BoostType | null; boostTimer: number }
+type Scene = { laserFuel: number; laserTimer: number; laserCooldown: number; lasers: Array<{ x: number; y: number }>; cleanupCharged: boolean; serveTimer: number; pointerX: number | null; ballX: number; ballY: number; ballVX: number; ballVY: number; ballSpeed: number; paddleX: number; paddleWidth: number; paddleBaseWidth: number; bricks: Brick[]; wave: number; lives: number; combo: number; paddleFlash: number; particles: Particle[]; drops: BoostDrop[]; boost: BoostType | null; boostTimer: number }
 type ScoreEntry = { name: string; score: number }
 
 const WIDTH = 800
@@ -30,6 +34,7 @@ function createScene(): Scene {
   const ballSpeed = 350
 
   return {
+    laserFuel: 50, laserTimer: 0, laserCooldown: 0, lasers: [], cleanupCharged: false,
     serveTimer: 1.1,
     pointerX: null,
     ballX: WIDTH / 2,
@@ -115,6 +120,12 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, boostLabel
     }
   }
 
+  for (const laser of scene.lasers) {
+    context.fillStyle = '#5689c6'
+    context.fillRect(laser.x - 2, laser.y - 12, 4, 19)
+    context.fillStyle = '#fff'
+    context.fillRect(laser.x - 1, laser.y - 12, 2, 14)
+  }
   for (const drop of scene.drops) {
     const color = drop.type === 'wide' ? '#5c8ee8' : drop.type === 'slow' ? '#75b8ad' : '#ef745b'
     const icon = drop.type === 'wide' ? '↔' : drop.type === 'slow' ? 'Ⅱ' : '✦'
@@ -220,30 +231,33 @@ function readRecords() {
 export function Game({ locale }: GameProps) {
   const copy = locale === 'pl' ? {
     headline: 'Jak długo dasz radę?', mode: 'TRYB BEZ KOŃCA', score: 'WYNIK', wave: 'FALA', lives: 'ŻYCIA', ready: 'Gotowy na pierwszą falę?', paused: 'Gra wstrzymana', over: 'Koniec gry',
-    goal: 'Krawędzie pałki zmieniają kąt odbicia. Rozbijaj cegły seriami; kolejne fale mają nowe układy i szybszą piłkę.', boostHelp: 'Złap spadające bonusy: szersza pałka, wolniejsza piłka lub ognista kula.', boostLabels: { wide: 'SZERSZA PAŁKA', slow: 'WOLNIEJSZA PIŁKA', fire: 'OGNISTA KULA' }, streak: 'SERIA TRAFIEŃ', combo: 'SERIA', resume: 'Wznów grę', again: 'Zagraj ponownie', start: 'Zacznij grę', save: 'Zapisz wynik',
+    goal: 'Krawędzie pałki zmieniają kąt odbicia. Rozbijaj cegły seriami; kolejne fale mają nowe układy i szybszą piłkę.', boostHelp: 'Złap bonusy. Rozbijanie cegieł ładuje laser: naciśnij spację, gdy pasek się zapełni. Ostatnie cztery cegły ładują go od razu.', boostLabels: { wide: 'SZERSZA PAŁKA', slow: 'WOLNIEJSZA PIŁKA', fire: 'OGNISTA KULA' }, streak: 'SERIA TRAFIEŃ', combo: 'SERIA', resume: 'Wznów grę', again: 'Zagraj ponownie', start: 'Zacznij grę', save: 'Zapisz wynik',
     highScores: 'NAJLEPSZE WYNIKI', nickname: 'PSEUDONIM', empty: 'Zagraj i zapisz pierwszy wynik.', local: 'ZAPISANO NA TYM URZĄDZENIU', move: 'STERUJ PAŁKĄ', left: 'Przesuń pałkę w lewo', right: 'Przesuń pałkę w prawo',
   } : {
     headline: 'How long can you last?', mode: 'ENDLESS MODE', score: 'SCORE', wave: 'WAVE', lives: 'LIVES', ready: 'Ready for the first wave?', paused: 'Game paused', over: 'Run over',
-    goal: 'Steer with the paddle edges. Chain bricks for multipliers; new layouts and faster returns follow each clear.', boostHelp: 'Catch falling boosts: a wider paddle, slower ball, or fireball.', boostLabels: { wide: 'WIDE PADDLE', slow: 'SLOW BALL', fire: 'FIREBALL' }, streak: 'HIT STREAK', combo: 'STREAK', resume: 'Resume game', again: 'Play again', start: 'Start endless run', save: 'Save score',
+    goal: 'Steer with the paddle edges. Chain bricks for multipliers; new layouts and faster returns follow each clear.', boostHelp: 'Catch boosts. Breaking bricks charges a laser burst: press Space when full. The last four bricks refill it.', boostLabels: { wide: 'WIDE PADDLE', slow: 'SLOW BALL', fire: 'FIREBALL' }, streak: 'HIT STREAK', combo: 'STREAK', resume: 'Resume game', again: 'Play again', start: 'Start endless run', save: 'Save score',
     highScores: 'HIGH SCORES', nickname: 'NICKNAME', empty: 'Play a round and save your first score.', local: 'SAVED ON THIS DEVICE', move: 'MOVE PADDLE', left: 'Move paddle left', right: 'Move paddle right',
   }
   const fallbackName = locale === 'pl' ? 'Gracz' : 'Player'
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRevision = useCanvasResolution(canvasRef, WIDTH, HEIGHT)
   const [initialScene] = useState(createScene)
   const sceneRef = useRef(initialScene)
-  const keysRef = useRef({ left: false, right: false })
+  const keysRef = useRef({ left: false, right: false, fire: false })
   const scoreRef = useRef(0)
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready')
   const [score, setScore] = useState(0)
   const [wave, setWave] = useState(1)
   const [lives, setLives] = useState(START_LIVES)
   const [combo, setCombo] = useState(0)
+  const [laserFuel, setLaserFuel] = useState(50)
   const [nickname, setNickname] = useState(fallbackName)
   const [records, setRecords] = useState<ScoreEntry[]>([])
   const [saved, setSaved] = useState(false)
   const [runBest, setRunBest] = useState(0)
+  const { audio, enabled: soundEnabled, toggle: toggleSound } = useGameAudio(status, score > runBest)
   useEffect(() => { if (status === 'over') saveScore() }, [status])
-  useGameSession(status, setStatus, startGame)
+  useGameSession(status, setStatus, startGame, canvasRef)
 
   useEffect(() => {
     setNickname(readNickname(fallbackName))
@@ -267,7 +281,8 @@ export function Game({ locale }: GameProps) {
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select')) return
-      if (['ArrowLeft', 'ArrowRight', 'a', 'A', 'd', 'D'].includes(event.key)) event.preventDefault()
+      if (['ArrowLeft', 'ArrowRight', 'a', 'A', 'd', 'D', ' '].includes(event.key)) event.preventDefault()
+      if (event.code === 'Space' && !event.repeat) keysRef.current.fire = true
       if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') { keysRef.current.left = true; scene.pointerX = null }
       if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') { keysRef.current.right = true; scene.pointerX = null }
     }
@@ -277,6 +292,23 @@ export function Game({ locale }: GameProps) {
       if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') keysRef.current.right = false
     }
 
+    function hitBrick(brick: Brick, x: number, y: number) {
+      audio.play('hit')
+      brick.hits -= 1
+      brick.alive = brick.hits > 0
+      scene.combo += 1
+      setCombo(scene.combo)
+      const multiplier = Math.min(5, 1 + Math.floor((scene.combo - 1) / 3))
+      scoreRef.current += 10 * multiplier
+      setScore(scoreRef.current)
+      addBurst(scene, x, y, brick.color, brick.alive ? 4 : 9)
+      if (!brick.alive) scene.laserFuel = Math.min(100, scene.laserFuel + 6)
+      if (!brick.alive && Math.random() < DROP_CHANCE) {
+        const types: BoostType[] = ['wide', 'slow', 'fire']
+        const type = types[Math.floor(Math.random() * types.length)]
+        scene.drops.push({ x: brick.x + BRICK_WIDTH / 2, y: brick.y + BRICK_HEIGHT / 2, vy: 145, type })
+      }
+    }
     function frame(time: number) {
       const delta = Math.min((time - (previousTime || time)) / 1000, 0.034)
       previousTime = time
@@ -299,6 +331,7 @@ export function Game({ locale }: GameProps) {
         const drop = scene.drops[index]
         drop.y += drop.vy * delta
         if (drop.y + 11 >= HEIGHT - 39 && drop.y - 11 <= HEIGHT - 26 && drop.x >= scene.paddleX - 11 && drop.x <= scene.paddleX + scene.paddleWidth + 11) {
+          audio.play('boost')
           applyBoost(scene, drop.type)
           addBurst(scene, drop.x, drop.y, drop.type === 'wide' ? '#5c8ee8' : drop.type === 'slow' ? '#75b8ad' : '#ef745b', 10)
           scene.drops.splice(index, 1)
@@ -319,6 +352,29 @@ export function Game({ locale }: GameProps) {
         }
       }
 
+      scene.laserTimer = Math.max(0, scene.laserTimer - delta)
+      scene.laserCooldown = Math.max(0, scene.laserCooldown - delta)
+      if (keysRef.current.fire && scene.laserFuel >= 100 && scene.laserTimer === 0) {
+        scene.laserFuel = 0
+        scene.laserTimer = 3
+        audio.play('boost')
+      }
+      keysRef.current.fire = false
+      if (scene.laserTimer > 0 && scene.laserCooldown === 0) {
+        scene.lasers.push({ x: scene.paddleX + scene.paddleWidth / 2, y: HEIGHT - 47 })
+        scene.laserCooldown = 0.22
+      }
+      for (let index = scene.lasers.length - 1; index >= 0; index -= 1) {
+        const laser = scene.lasers[index]
+        const previousY = laser.y
+        laser.y -= 780 * delta
+        const target = scene.bricks.filter((brick) => brick.alive && laser.x >= brick.x - 2 && laser.x <= brick.x + BRICK_WIDTH + 2 && previousY >= brick.y - 8 && laser.y <= brick.y + BRICK_HEIGHT + 8).sort((a, b) => b.y - a.y)[0]
+        if (target) { hitBrick(target, laser.x, target.y + BRICK_HEIGHT); scene.lasers.splice(index, 1) }
+        else if (laser.y < 28) scene.lasers.splice(index, 1)
+      }
+      const remaining = scene.bricks.filter((brick) => brick.alive).length
+      if (remaining > 0 && remaining <= 4 && !scene.cleanupCharged) { scene.laserFuel = 100; scene.cleanupCharged = true }
+      setLaserFuel(Math.floor(scene.laserFuel))
       if (scene.serveTimer > 0) {
         scene.serveTimer = Math.max(0, scene.serveTimer - delta)
         scene.ballX = scene.paddleX + scene.paddleWidth / 2
@@ -361,6 +417,7 @@ export function Game({ locale }: GameProps) {
         scene.combo = 0
         setCombo(0)
         scene.ballY = paddleY - 8
+        audio.play('hit')
         scene.paddleFlash = 0.12
         addBurst(scene, scene.ballX, scene.ballY + 7, '#fffdf0', 5)
       }
@@ -370,8 +427,6 @@ export function Game({ locale }: GameProps) {
         const overlaps = scene.ballX + 7 > brick.x && scene.ballX - 7 < brick.x + BRICK_WIDTH && scene.ballY + 7 > brick.y && scene.ballY - 7 < brick.y + BRICK_HEIGHT
         const overlappedBefore = previousBallX + 7 > brick.x && previousBallX - 7 < brick.x + BRICK_WIDTH && previousBallY + 7 > brick.y && previousBallY - 7 < brick.y + BRICK_HEIGHT
         if (overlaps && !(scene.boost === 'fire' && overlappedBefore)) {
-          brick.hits -= 1
-          brick.alive = brick.hits > 0
           if (scene.boost !== 'fire') {
             if (previousBallY + 7 <= brick.y || previousBallY - 7 >= brick.y + BRICK_HEIGHT) {
               scene.ballVY *= -1
@@ -381,17 +436,7 @@ export function Game({ locale }: GameProps) {
               scene.ballX = previousBallX < brick.x ? brick.x - 7 : brick.x + BRICK_WIDTH + 7
             }
           }
-          scene.combo += 1
-          setCombo(scene.combo)
-          const multiplier = Math.min(5, 1 + Math.floor((scene.combo - 1) / 3))
-          scoreRef.current += 10 * multiplier
-          setScore(scoreRef.current)
-          addBurst(scene, scene.ballX, scene.ballY, brick.color, brick.alive ? 4 : 9)
-          if (!brick.alive && Math.random() < DROP_CHANCE) {
-            const types: BoostType[] = ['wide', 'slow', 'fire']
-            const type = types[Math.floor(Math.random() * types.length)]
-            scene.drops.push({ x: brick.x + BRICK_WIDTH / 2, y: brick.y + BRICK_HEIGHT / 2, vy: 145, type })
-          }
+          hitBrick(brick, scene.ballX, scene.ballY)
           break
         }
       }
@@ -417,7 +462,11 @@ export function Game({ locale }: GameProps) {
       }
 
       if (scene.bricks.every((brick) => !brick.alive)) {
+        audio.play('point')
         scene.wave += 1
+        scene.cleanupCharged = false
+        scene.lasers = []
+        scene.laserTimer = 0
         scene.serveTimer = 1.25
         scene.drops = []
         if (scene.wave % 3 === 0) {
@@ -453,9 +502,9 @@ export function Game({ locale }: GameProps) {
       window.cancelAnimationFrame(animationFrame)
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
-      keysRef.current = { left: false, right: false }
+      keysRef.current = { left: false, right: false, fire: false }
     }
-  }, [status, locale])
+  }, [status, locale, canvasRevision])
 
   function startGame() {
     setRunBest(records[0]?.score ?? 0)
@@ -463,6 +512,7 @@ export function Game({ locale }: GameProps) {
     setScore(0)
     setWave(1)
     setLives(START_LIVES)
+    setLaserFuel(50)
     setCombo(0)
     setSaved(false)
     sceneRef.current = createScene()
@@ -490,8 +540,10 @@ export function Game({ locale }: GameProps) {
   return (
     <div className={`module-game brick-game${status === 'playing' ? ' is-playing' : ''}`}>
       <div className="module-game-main">
-        <div className="module-game-heading">
-          <div><span className="game-small-label">{copy.mode}</span><h2>{copy.headline}</h2></div>
+
+        <div className="canvas-wrap">
+        <div className="module-game-heading game-frame-bar">
+          <div><span className="game-small-label">{copy.mode}</span><h2>BRICK BREAKER</h2></div>
           <div className="brick-run-stats">
             <div className="score-readout"><span>{copy.wave}</span><strong>{wave.toString().padStart(2, '0')}</strong></div>
             <div className="score-readout"><span>{copy.lives}</span><strong>{lives}</strong></div>
@@ -499,18 +551,10 @@ export function Game({ locale }: GameProps) {
             <div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div>
           </div>
         </div>
-        <div className="arcade-livebar"><span>{locale === 'pl' ? 'KRAWĘDŹ PAŁKI ZMIENIA KĄT · CO 3 FALE +1 ŻYCIE' : 'PADDLE EDGES STEER · EVERY 3 WAVES +1 LIFE'}</span>{status === 'playing' && <button onClick={() => setStatus('paused')}>Ⅱ {locale === 'pl' ? 'Pauza' : 'Pause'}</button>}</div>
-        <div className="canvas-wrap">
-          <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Plansza Brick Breaker' : 'Brick Breaker play field'} onPointerMove={(event) => { if (status !== 'playing') return; const bounds = event.currentTarget.getBoundingClientRect(); sceneRef.current.pointerX = (event.clientX - bounds.left) * WIDTH / bounds.width }} onPointerDown={(event) => { if (status !== 'playing') return; event.currentTarget.setPointerCapture(event.pointerId); const bounds = event.currentTarget.getBoundingClientRect(); sceneRef.current.pointerX = (event.clientX - bounds.left) * WIDTH / bounds.width }} />
-          <GameOverlay status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Trafienie krawędzią pałki otwiera drogę za cegły.' : 'An edge return opens a route behind the bricks.') : copy.goal} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startGame} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.wave, value: wave }, { label: locale === 'pl' ? 'POPRZEDNI REKORD' : 'PREVIOUS BEST', value: runBest }] }} />
-        </div>
-        <div className="game-touch-controls">
-          <button aria-label={copy.left} onPointerDown={() => hold('left', true)} onPointerUp={() => hold('left', false)} onPointerCancel={() => hold('left', false)} onPointerLeave={() => hold('left', false)}>←</button>
-          <span>{copy.move}</span>
-          <button aria-label={copy.right} onPointerDown={() => hold('right', true)} onPointerUp={() => hold('right', false)} onPointerCancel={() => hold('right', false)} onPointerLeave={() => hold('right', false)}>→</button>
-        </div>
-        <p className="game-boost-note">{copy.boostHelp}</p>
-      </div>
+          <canvas tabIndex={0} ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Plansza Brick Breaker' : 'Brick Breaker play field'} onPointerMove={(event) => { if (status !== 'playing') return; const bounds = event.currentTarget.getBoundingClientRect(); sceneRef.current.pointerX = (event.clientX - bounds.left) * WIDTH / bounds.width }} onPointerDown={(event) => { if (status !== 'playing') return; event.currentTarget.setPointerCapture(event.pointerId); const bounds = event.currentTarget.getBoundingClientRect(); sceneRef.current.pointerX = (event.clientX - bounds.left) * WIDTH / bounds.width }} />
+        <div className="arcade-livebar"><span>{locale === 'pl' ? 'SPACJA · LASER' : 'SPACE · LASER'} {laserFuel >= 100 ? '●' : `${laserFuel}%`}</span><label className="boost-meter"><span>⚡</span><span className="boost-meter-track"><i style={{ width: `${laserFuel}%` }} /></span></label></div>
+          <SoundToggle locale={locale} enabled={soundEnabled} onToggle={toggleSound} onPause={status === 'playing' ? () => setStatus('paused') : undefined} />
+          <GamePanel locale={locale} onOpen={() => { if (status === 'playing') setStatus('paused') }}>
       <aside className="game-scoreboard">
         <div className="scoreboard-heading"><span className="game-small-label">{copy.highScores}</span><span className="scoreboard-star">✳</span></div>
         <label className="game-field"><span>{copy.nickname}</span><input value={nickname} maxLength={14} onChange={(event) => setNickname(event.target.value)} /></label>
@@ -522,6 +566,18 @@ export function Game({ locale }: GameProps) {
         </div>
         <div className="scoreboard-foot">{copy.local}</div>
       </aside>
+          </GamePanel>
+          <GameOverlay gameName="BRICK BREAKER" onRestart={startGame} status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Trafienie krawędzią pałki otwiera drogę za cegły.' : 'An edge return opens a route behind the bricks.') : copy.goal} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startGame} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.wave, value: wave }, { label: locale === 'pl' ? 'POPRZEDNI REKORD' : 'PREVIOUS BEST', value: runBest }] }} />
+        </div>
+        <div className="game-touch-controls">
+          <button aria-label={copy.left} onPointerDown={() => hold('left', true)} onPointerUp={() => hold('left', false)} onPointerCancel={() => hold('left', false)} onPointerLeave={() => hold('left', false)}>←</button>
+          <span>{copy.move}</span>
+          <button disabled={status !== 'playing' || laserFuel < 100} aria-label={locale === 'pl' ? 'Aktywuj laser' : 'Activate laser'} onPointerDown={() => { keysRef.current.fire = true }}>⚡</button>
+          <button aria-label={copy.right} onPointerDown={() => hold('right', true)} onPointerUp={() => hold('right', false)} onPointerCancel={() => hold('right', false)} onPointerLeave={() => hold('right', false)}>→</button>
+        </div>
+        <p className="game-boost-note">{copy.boostHelp}</p>
+      </div>
+
     </div>
   )
 }
