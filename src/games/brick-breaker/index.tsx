@@ -2,12 +2,12 @@ import type { GameManifest } from '../contract.ts'
 
 export const manifest = {
   en: {
-    slug: 'brick-breaker', name: 'Brick Breaker', description: 'Bounce the ball, clear the wall, and beat your high score.',
-    genreSlug: 'arcade', players: '1 player', playTime: '2–5 min', accent: 'coral', controls: 'Move with ← → or A / D. On touchscreens, use the buttons below the game.',
+    slug: 'brick-breaker', name: 'Brick Breaker', description: 'Clear endless waves, chain hit streaks, and catch boosts as the ball speeds up.',
+    genreSlug: 'arcade', players: '1 player', playTime: 'Endless', accent: 'coral', controls: 'Move with ← → or A / D. Steer the ball with the paddle edge and catch falling boosts.',
   },
   pl: {
-    slug: 'brick-breaker', name: 'Brick Breaker', description: 'Odbijaj piłkę, zbijaj klocki i pobij swój rekord.',
-    genreSlug: 'arcade', players: '1 gracz', playTime: '2–5 min', accent: 'coral', controls: 'Poruszaj się klawiszami ← → lub A / D. Na ekranie dotykowym użyj przycisków pod grą.',
+    slug: 'brick-breaker', name: 'Brick Breaker', description: 'Czyść kolejne fale, buduj serię trafień i łap bonusy, gdy piłka przyspiesza.',
+    genreSlug: 'arcade', players: '1 gracz', playTime: 'Bez końca', accent: 'coral', controls: 'Poruszaj się klawiszami ← → lub A / D. Kieruj piłką krawędzią pałki i łap spadające bonusy.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 

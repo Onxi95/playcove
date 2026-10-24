@@ -20,8 +20,16 @@ Create the production build with `npm run build`. The build runs TypeScript chec
 
 The game receives only its locale, with no router, portal state, or server API. `src/games/contract.ts` is the shared build-time module shape. Vite reads the registry to prerender each game and genre page in both languages.
 
+## Game design
+
+Games should be compelling and replayable through responsive controls, satisfying feedback, skill, fair challenge, and quick rematches. See [the game design standard](docs/game-design.md) before adding a game.
+
 ## Included games
 
 - Brick Breaker — solo arcade game
+- Neon Snake — solo endless arcade game
 - Paddle Duel — local two-player arcade game
-- Penalty Shootout — solo sports game
+- Penguin Launch — solo flight career with local upgrades and unlockable ramps
+- Rooftop Runner — solo endless runner
+- Soccer Duel — solo vs bot or local two player sports game
+- Star Patrol — solo wave-based shooter

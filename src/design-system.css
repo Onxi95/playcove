@@ -165,7 +165,7 @@ body { color: var(--color-ink); background: var(--color-canvas); font-family: va
 .genre-heading .eyebrow { justify-content: center; }
 .genre-heading h1 { margin-block: 11px; }
 .genre-icon { width: 53px; height: 53px; display: grid; place-items: center; margin-bottom: 16px; border-radius: 15px; color: var(--color-ink); background: var(--color-lime); font-size: 25px; }
-.genre-back { margin: 29px auto 0; }
+.genre-back { width: fit-content; display: flex; margin: 29px auto 0; }
 .not-found { min-height: 520px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .not-found > .eyebrow { justify-content: center; }
 .not-found h1 { margin-block: 13px 22px; }
@@ -177,6 +177,7 @@ body { color: var(--color-ink); background: var(--color-canvas); font-family: va
 .game-button { border-radius: 7px; font-size: 11px; }
 .game-button:hover { background: var(--color-blue); }
 .game-button-soft { color: var(--color-copy); }
+.brick-run-stats { display: flex; align-items: center; gap: 14px; }
 .game-scoreboard { border-left-color: #d7dfe8; }
 .game-small-label { color: #7c8999; font: 750 9px var(--font-ui); letter-spacing: .06em; }
 .game-field input { border-radius: 6px; color: var(--color-ink); background: white; font-size: 11px; }
@@ -184,54 +185,6 @@ body { color: var(--color-ink); background: var(--color-canvas); font-family: va
 .score-name, .match-log-row strong { color: var(--color-copy); }
 .scoreboard-foot { color: #8290a1; font: 750 8px var(--font-ui); }
 .canvas-wrap { border-color: rgba(16, 24, 39, .15); border-radius: 10px; }
-.kick-scene { min-height: 444px; padding: 14px 18px 15px; border-color: rgba(16, 24, 39, .1); border-radius: 10px; background: linear-gradient(180deg, #dce9c8 0%, #bad395 100%); }
-.kick-scoreline { color: #425b42; font: 750 9px var(--font-ui); letter-spacing: .05em; }
-.shot-pip { color: rgba(255,255,255,.8); }
-.shot-pip.pip-goal { color: #306448; }
-.shot-pip.pip-saved, .shot-pip.pip-wide { color: #a14c3b; }
-.goal-area { width: min(76%, 450px); height: 213px; margin-top: 13px; }
-.goal-frame { height: 174px; border-width: 8px; border-radius: 9px 9px 0 0; filter: drop-shadow(0 8px 6px rgba(50, 73, 48, .18)); }
-.goal-net { background-color: rgba(255,255,255,.28); background-size: 18px 18px; }
-.goalkeeper { width: 59px; height: 88px; bottom: 4px; border-radius: 20px 20px 9px 9px; background: transparent; box-shadow: none; transition: left .24s cubic-bezier(.2,.75,.25,1.25), transform .24s ease; }
-.goalkeeper::before { width: 27px; height: 27px; top: -23px; left: 50%; border: 2px solid rgba(16,24,39,.14); border-radius: 50%; background: #e9b98e; transform: translateX(-50%); box-shadow: none; }
-.goalkeeper::after { width: 76px; height: 12px; top: 16px; bottom: auto; left: 50%; border: 2px solid rgba(16,24,39,.12); border-radius: 8px; background: #e9b98e; transform: translateX(-50%); box-shadow: none; }
-.goalkeeper i { width: 40px; height: 52px; position: absolute; z-index: 1; top: 2px; left: 9px; border: 2px solid rgba(16,24,39,.15); border-radius: 13px 13px 8px 8px; background: linear-gradient(135deg, #f2704e 0%, #d84e43 100%); }
-.goalkeeper b { width: 68px; height: 12px; position: absolute; z-index: 2; top: 14px; left: -4px; border-radius: 8px; background: #f4d29e; box-shadow: 0 2px 0 rgba(16,24,39,.12); }
-.keeper-left { left: 17%; transform: translateX(-50%) rotate(-13deg); }
-.keeper-center { left: 50%; transform: translateX(-50%); }
-.keeper-right { left: 83%; transform: translateX(-50%) rotate(13deg); }
-.goal-ground { border-color: rgba(255,255,255,.63); }
-.flying-ball { border-width: 3px; background: #19283a; }
-.ball-wide { animation: shot-wide .44s ease-in forwards; }
-@keyframes shot-wide { 65% { width: 12px; height: 12px; } 100% { bottom: 178px; left: calc(50% + var(--shot-x)); width: 9px; height: 9px; } }
-.kick-result { top: 24px; padding: 7px 12px; font: 800 10px var(--font-ui); }
-.result-goal { background: #287253; }
-.result-saved { background: #46586c; }
-.result-wide { background: #a34d39; }
-.shot-controls { width: min(490px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) 112px; grid-template-areas: 'aim shoot' 'power shoot'; align-items: center; gap: 9px 13px; position: relative; z-index: 2; margin: 3px auto 0; }
-.aim-control { grid-area: aim; }
-.kick-control-label { display: block; margin-bottom: 6px; color: #53684d; font: 800 8px var(--font-ui); letter-spacing: .08em; }
-.shot-choices { width: 100%; gap: 6px; margin: 0; }
-.shot-choice { height: 37px; padding: 0 8px; border-color: rgba(255,255,255,.76); border-radius: 6px; color: #455b43; background: rgba(255,255,250,.8); }
-.shot-choice:hover, .shot-choice.is-selected { border-color: #253d31; color: white; background: #344e3d; }
-.shot-choice:disabled { opacity: .65; cursor: default; }
-.shot-choice > span { font: 800 7px var(--font-ui); }
-.shot-choice > strong { font-size: 16px; }
-.power-control { grid-area: power; }
-.power-label-row { display: flex; align-items: center; justify-content: space-between; }
-.power-label-row > span:last-child { margin-bottom: 6px; color: #425b42; font: 800 8px var(--font-ui); }
-.power-meter { height: 9px; position: relative; overflow: hidden; border: 1px solid rgba(48,73,47,.22); border-radius: 99px; background: rgba(255,255,255,.5); }
-.power-sweet-spot { height: 100%; position: absolute; left: 58%; width: 24%; background: #b8db4d; }
-.power-meter > i { width: 11px; height: 15px; position: absolute; top: -4px; left: 0; border: 2px solid white; border-radius: 4px; background: #1d3342; box-shadow: 0 1px 4px rgba(16,24,39,.35); transform: translateX(-50%); }
-.shoot-button { grid-area: shoot; min-width: 100px; min-height: 78px; align-self: stretch; flex-direction: column; gap: 5px; margin: 0; color: var(--color-ink); background: var(--color-lime); }
-.shoot-button:hover { background: white; }
-.shoot-button:disabled { opacity: .7; cursor: default; transform: none; }
-.kick-overlay { background: rgba(218, 232, 197, .91); }
-.kick-overlay > strong { max-width: 340px; color: #1d2a28; font: 750 22px/1.1 var(--font-display); letter-spacing: -.045em; }
-.kick-overlay > small { max-width: 360px; color: #435a49; font: 12px/1.45 var(--font-ui); }
-.kick-overlay .game-button { min-height: 40px; margin-top: 10px; }
-.kick-overlay .game-button + .game-button { margin-top: 8px; }
-
 @media (max-width: 850px) {
   .home-hero { grid-template-columns: 1fr .85fr; gap: 28px; padding: 43px; }
   .featured-game-wrap { padding: 15px; }
@@ -251,6 +204,12 @@ body { color: var(--color-ink); background: var(--color-canvas); font-family: va
   .touch-player > span { margin-right: 3px; color: var(--color-muted); font: 750 8px var(--font-ui); }
   .touch-player button { width: 36px; height: 36px; }
   .module-controls-caption { display: none; }
+}
+
+@media (max-width: 700px) {
+  .brick-run-stats { gap: 8px; }
+  .brick-run-stats .score-readout strong { font-size: 16px; }
+  .brick-run-stats .score-readout > span { font-size: 7px; }
 }
 
 @media (max-width: 640px) {
@@ -282,16 +241,11 @@ body { color: var(--color-ink); background: var(--color-canvas); font-family: va
   .footer-meta { width: 100%; margin-left: 0; }
   .game-intro { align-items: start; flex-direction: column; gap: 17px; }
   .game-intro h1 { font-size: 42px; }
+  .brick-game .module-game-heading { flex-wrap: wrap; }
+  .brick-run-stats { width: 100%; justify-content: flex-end; }
   .game-facts { gap: 28px; }
   .game-details-row { grid-template-columns: 1fr; }
   .game-mount { padding: 12px; }
-  .kick-scene { min-height: 422px; padding-inline: 10px; }
-  .goal-area { width: 89%; height: 205px; }
-  .goal-frame { height: 166px; }
-  .shot-controls { grid-template-columns: minmax(0, 1fr) 85px; gap: 8px; }
-  .shoot-button { min-width: 80px; min-height: 76px; padding-inline: 10px; }
-  .shot-choice { flex-direction: column-reverse; justify-content: center; gap: 0; padding: 2px; }
-  .shot-choice > span { font-size: 6px; }
   .play-shell-top { padding-inline: 12px; font-size: 9px; }
   .game-grid.more-game-grid { grid-template-columns: 1fr; }
   .more-game-grid .game-card-art { height: auto; aspect-ratio: 1.62; }

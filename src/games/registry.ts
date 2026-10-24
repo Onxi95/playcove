@@ -1,8 +1,12 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 import type { GameModule, GameProps } from './contract.ts'
 import { manifest as brickBreaker, Miniature as BrickBreakerMiniature } from './brick-breaker/index.tsx'
+import { manifest as neonSnake, Miniature as NeonSnakeMiniature } from './neon-snake/index.tsx'
 import { manifest as paddleDuel, Miniature as PaddleDuelMiniature } from './paddle-duel/index.tsx'
-import { manifest as penaltyKick, Miniature as PenaltyKickMiniature } from './penalty-kick/index.tsx'
+import { manifest as penguinLaunch, Miniature as PenguinLaunchMiniature } from './penguin-launch/index.tsx'
+import { manifest as rooftopRunner, Miniature as RooftopRunnerMiniature } from './rooftop-runner/index.tsx'
+import { manifest as soccerDuel, Miniature as SoccerDuelMiniature } from './soccer-duel/index.tsx'
+import { manifest as starPatrol, Miniature as StarPatrolMiniature } from './star-patrol/index.tsx'
 
 export const games: GameModule[] = [
   {
@@ -10,6 +14,14 @@ export const games: GameModule[] = [
     Miniature: BrickBreakerMiniature,
     loadGame: async () => {
       const module = await import('./brick-breaker/Game.tsx')
+      return { default: module.Game }
+    },
+  },
+  {
+    manifest: neonSnake,
+    Miniature: NeonSnakeMiniature,
+    loadGame: async () => {
+      const module = await import('./neon-snake/Game.tsx')
       return { default: module.Game }
     },
   },
@@ -22,10 +34,34 @@ export const games: GameModule[] = [
     },
   },
   {
-    manifest: penaltyKick,
-    Miniature: PenaltyKickMiniature,
+    manifest: penguinLaunch,
+    Miniature: PenguinLaunchMiniature,
     loadGame: async () => {
-      const module = await import('./penalty-kick/Game.tsx')
+      const module = await import('./penguin-launch/Game.tsx')
+      return { default: module.Game }
+    },
+  },
+  {
+    manifest: rooftopRunner,
+    Miniature: RooftopRunnerMiniature,
+    loadGame: async () => {
+      const module = await import('./rooftop-runner/Game.tsx')
+      return { default: module.Game }
+    },
+  },
+  {
+    manifest: soccerDuel,
+    Miniature: SoccerDuelMiniature,
+    loadGame: async () => {
+      const module = await import('./soccer-duel/Game.tsx')
+      return { default: module.Game }
+    },
+  },
+  {
+    manifest: starPatrol,
+    Miniature: StarPatrolMiniature,
+    loadGame: async () => {
+      const module = await import('./star-patrol/Game.tsx')
       return { default: module.Game }
     },
   },

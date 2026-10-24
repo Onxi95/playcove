@@ -2,12 +2,12 @@ import type { GameManifest } from '../contract.ts'
 
 export const manifest = {
   en: {
-    slug: 'paddle-duel', name: 'Paddle Duel', description: 'A table-tennis match on one keyboard. First to five points wins.',
-    genreSlug: 'two-player', players: '2 players', playTime: '3–6 min', accent: 'blue', controls: 'Player 1: W / S. Player 2: ↑ / ↓. On touchscreens, use the controls below the court.',
+    slug: 'paddle-duel', name: 'Paddle Duel', description: 'A table-tennis match on one keyboard. Steer rallies through boost orbs and race to five.',
+    genreSlug: 'two-player', players: '2 players', playTime: '3–6 min', accent: 'blue', controls: 'Player 1: W / S. Player 2: ↑ / ↓. Paddle movement steers each return; cross the court center to collect boosts.',
   },
   pl: {
-    slug: 'paddle-duel', name: 'Paddle Duel', description: 'Mecz tenisa stołowego na jednej klawiaturze. Wygrywa osoba, która pierwsza zdobędzie pięć punktów.',
-    genreSlug: 'two-player', players: '2 graczy', playTime: '3–6 min', accent: 'blue', controls: 'Gracz 1: W / S. Gracz 2: ↑ / ↓. Na ekranie dotykowym użyj przycisków pod kortem.',
+    slug: 'paddle-duel', name: 'Paddle Duel', description: 'Mecz tenisa stołowego na jednej klawiaturze. Kieruj piłkę przez bonusy i walcz do pięciu.',
+    genreSlug: 'two-player', players: '2 graczy', playTime: '3–6 min', accent: 'blue', controls: 'Gracz 1: W / S. Gracz 2: ↑ / ↓. Ruch pałki kieruje piłką; przetnij środek kortu, by zebrać bonus.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 

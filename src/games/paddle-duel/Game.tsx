@@ -2,12 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 
 type MatchRecord = { winner: string; final: string; p1: string; p2: string }
-type Match = { ballX: number; ballY: number; ballVX: number; ballVY: number; leftY: number; rightY: number; p1: number; p2: number }
+type BoostType = 'stretch' | 'dash' | 'curve'
+type BoostOrb = { x: number; y: number; type: BoostType }
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; duration: number; color: string }
+type Match = {
+  ballX: number; ballY: number; ballVX: number; ballVY: number; leftY: number; rightY: number; p1: number; p2: number
+  speed: number; rally: number; lastHitter: 0 | 1; leftFlash: number; rightFlash: number; particles: Particle[]
+  serveTimer: number; pointTimer: number; lastPoint: 0 | 1 | null; boostOrb: BoostOrb | null
+  p1Boost: BoostType | null; p2Boost: BoostType | null; p1BoostTimer: number; p2BoostTimer: number
+}
 
 const WIDTH = 800
 const HEIGHT = 440
 const PADDLE_W = 13
 const PADDLE_H = 86
+const BALL_RADIUS = 9
 const WIN_SCORE = 5
 
 function createMatch(): Match {
@@ -20,10 +29,50 @@ function createMatch(): Match {
     rightY: HEIGHT / 2 - PADDLE_H / 2,
     p1: 0,
     p2: 0,
+    speed: 250,
+    rally: 0,
+    lastHitter: 0,
+    leftFlash: 0,
+    rightFlash: 0,
+    particles: [],
+    serveTimer: 0,
+    pointTimer: 0,
+    lastPoint: null,
+    boostOrb: null,
+    p1Boost: null,
+    p2Boost: null,
+    p1BoostTimer: 0,
+    p2BoostTimer: 0,
   }
 }
 
-function drawMatch(context: CanvasRenderingContext2D, match: Match) {
+function addBurst(match: Match, x: number, y: number, color: string, count: number) {
+  for (let index = 0; index < count; index += 1) {
+    const angle = (Math.PI * 2 * index) / count
+    const speed = 75 + (index % 3) * 40
+    match.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.28, duration: 0.28, color })
+  }
+}
+
+function paddleHeight(boost: BoostType | null) {
+  return PADDLE_H + (boost === 'stretch' ? 42 : 0)
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
+}
+
+function grantBoost(match: Match, player: 0 | 1, boost: BoostType) {
+  if (player === 0) {
+    match.p1Boost = boost
+    match.p1BoostTimer = 8
+  } else {
+    match.p2Boost = boost
+    match.p2BoostTimer = 8
+  }
+}
+
+function drawMatch(context: CanvasRenderingContext2D, match: Match, pointLabel: string, rallyLabel: string, boostLabels: Record<BoostType, string>) {
   context.clearRect(0, 0, WIDTH, HEIGHT)
   context.fillStyle = '#e8edf5'
   context.fillRect(0, 0, WIDTH, HEIGHT)
@@ -44,18 +93,86 @@ function drawMatch(context: CanvasRenderingContext2D, match: Match) {
   context.fillText(String(match.p1).padStart(2, '0'), WIDTH / 2 - 75, 88)
   context.fillText(String(match.p2).padStart(2, '0'), WIDTH / 2 + 75, 88)
 
-  context.fillStyle = '#ed705a'
+  const ballSpeed = Math.hypot(match.ballVX, match.ballVY)
+  if (ballSpeed > 180) {
+    context.save()
+    for (let index = 4; index > 0; index -= 1) {
+      const trail = index / 5
+      context.globalAlpha = (1 - trail) * Math.min(0.5, ballSpeed / 1100)
+      context.fillStyle = '#d7b653'
+      context.beginPath()
+      context.arc(match.ballX - match.ballVX * trail * 0.014, match.ballY - match.ballVY * trail * 0.014, BALL_RADIUS * (1 - trail * 0.55), 0, Math.PI * 2)
+      context.fill()
+    }
+    context.restore()
+  }
+
+  context.fillStyle = match.leftFlash > 0 ? '#ffb08e' : '#ed705a'
   context.beginPath()
-  context.roundRect(37, match.leftY, PADDLE_W, PADDLE_H, 7)
+  context.roundRect(37, match.leftY, PADDLE_W, paddleHeight(match.p1Boost), 7)
   context.fill()
-  context.fillStyle = '#557de2'
+  context.fillStyle = match.rightFlash > 0 ? '#b5c7ff' : '#557de2'
   context.beginPath()
-  context.roundRect(WIDTH - 37 - PADDLE_W, match.rightY, PADDLE_W, PADDLE_H, 7)
+  context.roundRect(WIDTH - 37 - PADDLE_W, match.rightY, PADDLE_W, paddleHeight(match.p2Boost), 7)
   context.fill()
+
+  if (match.p1Boost) {
+    context.fillStyle = '#ed705a'
+    context.font = '800 9px system-ui, sans-serif'
+    context.textAlign = 'left'
+    context.fillText(`${boostLabels[match.p1Boost]} ${Math.ceil(match.p1BoostTimer)}s`, 57, 36)
+  }
+  if (match.p2Boost) {
+    context.fillStyle = '#557de2'
+    context.font = '800 9px system-ui, sans-serif'
+    context.textAlign = 'right'
+    context.fillText(`${boostLabels[match.p2Boost]} ${Math.ceil(match.p2BoostTimer)}s`, WIDTH - 57, 36)
+  }
+
+  if (match.boostOrb) {
+    const icon = match.boostOrb.type === 'stretch' ? '↕' : match.boostOrb.type === 'dash' ? '⚡' : '↝'
+    context.save()
+    context.shadowColor = '#b8f26d'
+    context.shadowBlur = 18
+    context.fillStyle = '#b8f26d'
+    context.beginPath()
+    context.arc(match.boostOrb.x, match.boostOrb.y, 14, 0, Math.PI * 2)
+    context.fill()
+    context.shadowBlur = 0
+    context.fillStyle = '#25334a'
+    context.font = '900 15px system-ui, sans-serif'
+    context.fillText(icon, match.boostOrb.x, match.boostOrb.y + 5)
+    context.restore()
+  }
+
+  if (match.rally >= 2) {
+    context.fillStyle = '#557de2'
+    context.font = '800 10px system-ui, sans-serif'
+    context.fillText(`${rallyLabel} ×${match.rally}`, WIDTH / 2, HEIGHT - 22)
+  }
+
   context.fillStyle = '#d7b653'
   context.beginPath()
-  context.arc(match.ballX, match.ballY, 9, 0, Math.PI * 2)
+  context.arc(match.ballX, match.ballY, BALL_RADIUS, 0, Math.PI * 2)
   context.fill()
+
+  for (const particle of match.particles) {
+    context.globalAlpha = Math.max(0, particle.life / particle.duration)
+    context.fillStyle = particle.color
+    context.beginPath()
+    context.arc(particle.x, particle.y, 2 + 2 * particle.life / particle.duration, 0, Math.PI * 2)
+    context.fill()
+  }
+  context.globalAlpha = 1
+
+  if (match.pointTimer > 0 && match.lastPoint !== null) {
+    context.save()
+    context.globalAlpha = Math.min(1, match.pointTimer * 2)
+    context.fillStyle = match.lastPoint === 0 ? '#ed705a' : '#557de2'
+    context.font = '900 38px system-ui, sans-serif'
+    context.fillText(pointLabel, WIDTH / 2, HEIGHT / 2 - 25)
+    context.restore()
+  }
 }
 
 function readName(key: string, fallback: string) {
@@ -86,6 +203,8 @@ export function Game({ locale }: GameProps) {
     player: (number: number) => `Gracz ${number}`, up: 'w górę', down: 'w dół',
     scoreboard: 'HISTORIA MECZÓW', playerName: (number: number) => `IMIĘ GRACZA ${number}`,
     empty: 'Pierwszy mecz pojawi się tutaj.', local: 'ZAPISANO NA TYM URZĄDZENIU',
+    point: 'PUNKT!', rally: 'SERIA', boostHelp: 'Uderz piłkę przez środek kortu, by zebrać bonus. Ruch pałki nadaje piłce rotację.',
+    boosts: { stretch: 'DŁUGA', dash: 'SZYBKA', curve: 'ROTACJA' },
   } : {
     firstToFive: 'FIRST TO FIVE', title: 'Ready, set, rally.', paused: 'Match paused',
     startTitle: 'Two players. One keyboard.', winSuffix: 'wins!', final: 'Final score', goal: 'First player to five points wins.',
@@ -93,6 +212,8 @@ export function Game({ locale }: GameProps) {
     player: (number: number) => `Player ${number}`, up: 'move up', down: 'move down',
     scoreboard: 'MATCH HISTORY', playerName: (number: number) => `PLAYER ${number} NAME`,
     empty: 'Your first match will show up here.', local: 'SAVED ON THIS DEVICE',
+    point: 'POINT!', rally: 'RALLY', boostHelp: 'Send the ball through the center to collect a boost. Paddle movement adds spin to your return.',
+    boosts: { stretch: 'STRETCH', dash: 'DASH', curve: 'CURVE' },
   }
   const p1Fallback = copy.player(1)
   const p2Fallback = copy.player(2)
@@ -119,7 +240,7 @@ export function Game({ locale }: GameProps) {
     const drawingContext = context
 
     if (status !== 'playing') {
-      drawMatch(drawingContext, matchRef.current)
+      drawMatch(drawingContext, matchRef.current, copy.point, copy.rally, copy.boosts)
       return
     }
 
@@ -149,59 +270,147 @@ export function Game({ locale }: GameProps) {
     function resetBall(direction: number) {
       match.ballX = WIDTH / 2
       match.ballY = HEIGHT / 2
-      match.ballVX = direction * 250
-      match.ballVY = Math.random() > .5 ? 130 : -130
+      match.speed = 250
+      const angle = Math.random() > .5 ? 0.22 : -0.22
+      match.ballVX = direction * match.speed * Math.cos(angle)
+      match.ballVY = match.speed * Math.sin(angle)
+      match.rally = 0
+      match.lastHitter = direction < 0 ? 1 : 0
+      match.boostOrb = null
+      match.serveTimer = 0.62
+      match.pointTimer = 0.78
     }
 
     function frame(time: number) {
       const delta = Math.min((time - (previousTime || time)) / 1000, .034)
       previousTime = time
-      const paddleSpeed = 385
-      if (keysRef.current.p1Up) match.leftY -= paddleSpeed * delta
-      if (keysRef.current.p1Down) match.leftY += paddleSpeed * delta
-      if (keysRef.current.p2Up) match.rightY -= paddleSpeed * delta
-      if (keysRef.current.p2Down) match.rightY += paddleSpeed * delta
-      match.leftY = Math.max(32, Math.min(HEIGHT - 32 - PADDLE_H, match.leftY))
-      match.rightY = Math.max(32, Math.min(HEIGHT - 32 - PADDLE_H, match.rightY))
+      match.serveTimer = Math.max(0, match.serveTimer - delta)
+      match.pointTimer = Math.max(0, match.pointTimer - delta)
+      match.p1BoostTimer = Math.max(0, match.p1BoostTimer - delta)
+      match.p2BoostTimer = Math.max(0, match.p2BoostTimer - delta)
+      if (match.p1BoostTimer === 0) match.p1Boost = null
+      if (match.p2BoostTimer === 0) match.p2Boost = null
 
-      match.ballX += match.ballVX * delta
-      match.ballY += match.ballVY * delta
-      if (match.ballY < 30 || match.ballY > HEIGHT - 30) match.ballVY *= -1
-
-      const leftPaddleX = 37 + PADDLE_W
-      if (match.ballVX < 0 && match.ballX - 9 < leftPaddleX && match.ballX > leftPaddleX - 18 && match.ballY > match.leftY - 6 && match.ballY < match.leftY + PADDLE_H + 6) {
-        const offset = (match.ballY - (match.leftY + PADDLE_H / 2)) / (PADDLE_H / 2)
-        match.ballVX = Math.abs(match.ballVX) * 1.045
-        match.ballVY = offset * 285
+      for (let index = match.particles.length - 1; index >= 0; index -= 1) {
+        const particle = match.particles[index]
+        particle.life -= delta
+        if (particle.life <= 0) {
+          match.particles.splice(index, 1)
+        } else {
+          particle.x += particle.vx * delta
+          particle.y += particle.vy * delta
+          particle.vx *= Math.max(0, 1 - 2.2 * delta)
+          particle.vy *= Math.max(0, 1 - 2.2 * delta)
+        }
       }
-      const rightPaddleX = WIDTH - 37 - PADDLE_W
-      if (match.ballVX > 0 && match.ballX + 9 > rightPaddleX && match.ballX < rightPaddleX + PADDLE_W + 18 && match.ballY > match.rightY - 6 && match.ballY < match.rightY + PADDLE_H + 6) {
-        const offset = (match.ballY - (match.rightY + PADDLE_H / 2)) / (PADDLE_H / 2)
-        match.ballVX = -Math.abs(match.ballVX) * 1.045
-        match.ballVY = offset * 285
+      match.leftFlash = Math.max(0, match.leftFlash - delta)
+      match.rightFlash = Math.max(0, match.rightFlash - delta)
+
+      const p1Height = paddleHeight(match.p1Boost)
+      const p2Height = paddleHeight(match.p2Boost)
+      const p1Speed = 385 * (match.p1Boost === 'dash' ? 1.5 : 1)
+      const p2Speed = 385 * (match.p2Boost === 'dash' ? 1.5 : 1)
+      const previousLeftY = match.leftY
+      const previousRightY = match.rightY
+      if (keysRef.current.p1Up) match.leftY -= p1Speed * delta
+      if (keysRef.current.p1Down) match.leftY += p1Speed * delta
+      if (keysRef.current.p2Up) match.rightY -= p2Speed * delta
+      if (keysRef.current.p2Down) match.rightY += p2Speed * delta
+      match.leftY = clamp(match.leftY, 32, HEIGHT - 32 - p1Height)
+      match.rightY = clamp(match.rightY, 32, HEIGHT - 32 - p2Height)
+      const p1Velocity = delta > 0 ? (match.leftY - previousLeftY) / delta : 0
+      const p2Velocity = delta > 0 ? (match.rightY - previousRightY) / delta : 0
+
+      if (match.serveTimer === 0) {
+        match.ballX += match.ballVX * delta
+        match.ballY += match.ballVY * delta
+        if (match.ballY < 30 + BALL_RADIUS) {
+          match.ballY = 30 + BALL_RADIUS
+          match.ballVY = Math.abs(match.ballVY)
+          addBurst(match, match.ballX, match.ballY, '#ffffff', 4)
+        } else if (match.ballY > HEIGHT - 30 - BALL_RADIUS) {
+          match.ballY = HEIGHT - 30 - BALL_RADIUS
+          match.ballVY = -Math.abs(match.ballVY)
+          addBurst(match, match.ballX, match.ballY, '#ffffff', 4)
+        }
+
+        if (match.boostOrb && Math.hypot(match.ballX - match.boostOrb.x, match.ballY - match.boostOrb.y) < BALL_RADIUS + 16) {
+          grantBoost(match, match.lastHitter, match.boostOrb.type)
+          addBurst(match, match.boostOrb.x, match.boostOrb.y, '#b8f26d', 12)
+          match.boostOrb = null
+        }
+
+        const hitPaddle = (player: 0 | 1, paddleY: number, height: number, paddleVelocity: number, paddleSpeed: number) => {
+          const offset = clamp((match.ballY - (paddleY + height / 2)) / (height / 2), -1, 1)
+          const english = clamp(paddleVelocity / paddleSpeed, -1, 1) * 0.3
+          const curve = player === 0 ? match.p1Boost === 'curve' : match.p2Boost === 'curve'
+          const angle = clamp((offset * 0.76 + english) * (curve ? 1.35 : 1), -1.08, 1.08)
+          match.speed = Math.min(560, match.speed * 1.045)
+          const direction = player === 0 ? 1 : -1
+          match.ballVX = direction * match.speed * Math.cos(angle)
+          match.ballVY = match.speed * Math.sin(angle)
+          match.rally += 1
+          match.lastHitter = player
+          if (player === 0) {
+            match.ballX = 37 + PADDLE_W + BALL_RADIUS + 1
+            match.leftFlash = 0.14
+            addBurst(match, match.ballX - BALL_RADIUS, match.ballY, '#ffb08e', 7)
+          } else {
+            match.ballX = WIDTH - 37 - PADDLE_W - BALL_RADIUS - 1
+            match.rightFlash = 0.14
+            addBurst(match, match.ballX + BALL_RADIUS, match.ballY, '#b5c7ff', 7)
+          }
+          if (match.rally >= 4 && match.rally % 4 === 0 && !match.boostOrb) {
+            const types: BoostType[] = ['stretch', 'dash', 'curve']
+            match.boostOrb = { x: WIDTH / 2, y: [HEIGHT / 2 - 64, HEIGHT / 2, HEIGHT / 2 + 64][Math.floor(match.rally / 4 - 1) % 3], type: types[Math.floor(match.rally / 4 - 1) % types.length] }
+          }
+        }
+
+        const leftPaddleX = 37 + PADDLE_W
+        if (match.ballVX < 0 && match.ballX - BALL_RADIUS <= leftPaddleX && match.ballX > leftPaddleX - 18 && match.ballY > match.leftY - BALL_RADIUS && match.ballY < match.leftY + p1Height + BALL_RADIUS) {
+          hitPaddle(0, match.leftY, p1Height, p1Velocity, p1Speed)
+        }
+        const rightPaddleX = WIDTH - 37 - PADDLE_W
+        if (match.ballVX > 0 && match.ballX + BALL_RADIUS >= rightPaddleX && match.ballX < rightPaddleX + PADDLE_W + 18 && match.ballY > match.rightY - BALL_RADIUS && match.ballY < match.rightY + p2Height + BALL_RADIUS) {
+          hitPaddle(1, match.rightY, p2Height, p2Velocity, p2Speed)
+        }
       }
 
       if (match.ballX < 15) {
         match.p2 += 1
+        match.lastPoint = 1
+        match.pointTimer = 0.78
+        match.serveTimer = 0.62
+        match.boostOrb = null
+        match.rally = 0
+        match.speed = 250
+        addBurst(match, 24, match.ballY, '#557de2', 18)
         setScore({ p1: match.p1, p2: match.p2 })
         if (match.p2 >= WIN_SCORE) {
           setStatus('over')
-          drawMatch(drawingContext, match)
+          drawMatch(drawingContext, match, copy.point, copy.rally, copy.boosts)
           return
         }
         resetBall(-1)
       } else if (match.ballX > WIDTH - 15) {
         match.p1 += 1
+        match.lastPoint = 0
+        match.pointTimer = 0.78
+        match.serveTimer = 0.62
+        match.boostOrb = null
+        match.rally = 0
+        match.speed = 250
+        addBurst(match, WIDTH - 24, match.ballY, '#ed705a', 18)
         setScore({ p1: match.p1, p2: match.p2 })
         if (match.p1 >= WIN_SCORE) {
           setStatus('over')
-          drawMatch(drawingContext, match)
+          drawMatch(drawingContext, match, copy.point, copy.rally, copy.boosts)
           return
         }
         resetBall(1)
       }
 
-      drawMatch(drawingContext, match)
+      drawMatch(drawingContext, match, copy.point, copy.rally, copy.boosts)
       animationFrame = requestAnimationFrame(frame)
     }
 
@@ -214,7 +423,7 @@ export function Game({ locale }: GameProps) {
       window.removeEventListener('keyup', handleKeyUp)
       keysRef.current = { p1Up: false, p1Down: false, p2Up: false, p2Down: false }
     }
-  }, [status])
+  }, [status, locale])
 
   function startGame() {
     matchRef.current = createMatch()
@@ -268,6 +477,7 @@ export function Game({ locale }: GameProps) {
           <div className="touch-player touch-p2"><span>{copy.player(2).toUpperCase()}</span><button aria-label={`${copy.player(2)} ${copy.up}`} onPointerDown={() => hold('p2', 'up', true)} onPointerUp={() => hold('p2', 'up', false)} onPointerCancel={() => hold('p2', 'up', false)} onPointerLeave={() => hold('p2', 'up', false)}>↑</button><button aria-label={`${copy.player(2)} ${copy.down}`} onPointerDown={() => hold('p2', 'down', true)} onPointerUp={() => hold('p2', 'down', false)} onPointerCancel={() => hold('p2', 'down', false)} onPointerLeave={() => hold('p2', 'down', false)}>↓</button></div>
         </div>
         <div className="module-controls-caption"><span>{copy.player(1).toUpperCase()} <kbd>W</kbd> <kbd>S</kbd></span><i /> <span>{copy.player(2).toUpperCase()} <kbd>↑</kbd> <kbd>↓</kbd></span></div>
+        <p className="game-boost-note">{copy.boostHelp}</p>
       </div>
       <aside className="game-scoreboard">
         <div className="scoreboard-heading"><span className="game-small-label">{copy.scoreboard}</span><span className="scoreboard-star">✳</span></div>

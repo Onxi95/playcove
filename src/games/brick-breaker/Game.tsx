@@ -1,42 +1,109 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 
-type Brick = { x: number; y: number; color: string; alive: boolean }
-type Scene = { ballX: number; ballY: number; ballVX: number; ballVY: number; paddleX: number; bricks: Brick[] }
+type Brick = { x: number; y: number; color: string; hits: number; alive: boolean }
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; duration: number; color: string }
+type BoostType = 'wide' | 'slow' | 'fire'
+type BoostDrop = { x: number; y: number; vy: number; type: BoostType }
+type Scene = { ballX: number; ballY: number; ballVX: number; ballVY: number; ballSpeed: number; paddleX: number; paddleWidth: number; paddleBaseWidth: number; bricks: Brick[]; wave: number; lives: number; combo: number; paddleFlash: number; particles: Particle[]; drops: BoostDrop[]; boost: BoostType | null; boostTimer: number }
 type ScoreEntry = { name: string; score: number }
 
 const WIDTH = 800
 const HEIGHT = 440
-const PADDLE_WIDTH = 118
 const PADDLE_HEIGHT = 13
 const BRICK_WIDTH = 62
 const BRICK_HEIGHT = 19
 const BRICK_GAP = 8
 const BRICK_COLORS = ['#f0785d', '#f3a34a', '#c8d867', '#75b8ad', '#718be5']
+const START_LIVES = 3
+const MIN_PADDLE_WIDTH = 72
+const WIDE_FACTOR = 1.65
+const SLOW_FACTOR = 0.78
+const BOOST_DURATION = 8
+const DROP_CHANCE = 0.2
 
-function createScene(): Scene {
-  const bricks = Array.from({ length: 50 }, (_, index) => {
+function createBricks(wave: number) {
+  const rowCount = Math.min(7, 5 + Math.floor((wave - 1) / 3))
+  return Array.from({ length: rowCount * 10 }, (_, index) => {
     const row = Math.floor(index / 10)
     const column = index % 10
+    const hits = 1 + Math.min(3, Math.floor((wave - 1) / 3)) + (wave > 2 && row % 3 === 0 ? 1 : 0)
     return {
-      x: 78 + column * (BRICK_WIDTH + BRICK_GAP),
+      x: 54 + column * (BRICK_WIDTH + BRICK_GAP),
       y: 46 + row * (BRICK_HEIGHT + 9),
-      color: BRICK_COLORS[row],
+      color: BRICK_COLORS[row % BRICK_COLORS.length],
+      hits,
       alive: true,
     }
   })
+}
+
+function createScene(): Scene {
+  const wave = 1
+  const paddleBaseWidth = 84
+  const paddleWidth = paddleBaseWidth
+  const ballSpeed = 350
 
   return {
     ballX: WIDTH / 2,
     ballY: HEIGHT - 76,
-    ballVX: 190,
-    ballVY: -235,
-    paddleX: WIDTH / 2 - PADDLE_WIDTH / 2,
-    bricks,
+    ballVX: ballSpeed * 0.61,
+    ballVY: -ballSpeed * 0.79,
+    ballSpeed,
+    paddleX: WIDTH / 2 - paddleWidth / 2,
+    paddleWidth,
+    paddleBaseWidth,
+    bricks: createBricks(wave),
+    wave,
+    lives: START_LIVES,
+    combo: 0,
+    paddleFlash: 0,
+    particles: [],
+    drops: [],
+    boost: null,
+    boostTimer: 0,
   }
 }
 
-function renderScene(context: CanvasRenderingContext2D, scene: Scene) {
+function addBurst(scene: Scene, x: number, y: number, color: string, count: number) {
+  for (let index = 0; index < count; index += 1) {
+    const angle = (Math.PI * 2 * index) / count
+    const speed = 75 + (index % 3) * 45
+    scene.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.28, duration: 0.28, color })
+  }
+}
+
+function resizePaddle(scene: Scene, width: number) {
+  const center = scene.paddleX + scene.paddleWidth / 2
+  scene.paddleWidth = width
+  scene.paddleX = Math.max(38, Math.min(WIDTH - 38 - width, center - width / 2))
+}
+
+function applyBoost(scene: Scene, boost: BoostType) {
+  if (scene.boost === 'slow' && boost !== 'slow') {
+    scene.ballVX /= SLOW_FACTOR
+    scene.ballVY /= SLOW_FACTOR
+  }
+  if (scene.boost !== 'slow' && boost === 'slow') {
+    scene.ballVX *= SLOW_FACTOR
+    scene.ballVY *= SLOW_FACTOR
+  }
+  scene.boost = boost
+  scene.boostTimer = BOOST_DURATION
+  resizePaddle(scene, scene.paddleBaseWidth * (boost === 'wide' ? WIDE_FACTOR : 1))
+}
+
+function clearBoost(scene: Scene) {
+  if (scene.boost === 'slow') {
+    scene.ballVX /= SLOW_FACTOR
+    scene.ballVY /= SLOW_FACTOR
+  }
+  scene.boost = null
+  scene.boostTimer = 0
+  resizePaddle(scene, scene.paddleBaseWidth)
+}
+
+function renderScene(context: CanvasRenderingContext2D, scene: Scene, boostLabels: Record<BoostType, string>, streakLabel: string) {
   context.clearRect(0, 0, WIDTH, HEIGHT)
   context.fillStyle = '#f6f4e9'
   context.fillRect(0, 0, WIDTH, HEIGHT)
@@ -47,19 +114,52 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene) {
 
   for (const brick of scene.bricks) {
     if (!brick.alive) continue
-    context.fillStyle = brick.color
+    context.fillStyle = brick.hits > 1 ? '#545b65' : brick.color
     context.beginPath()
     context.roundRect(brick.x, brick.y, BRICK_WIDTH, BRICK_HEIGHT, 5)
     context.fill()
     context.fillStyle = 'rgba(255,255,255,.26)'
     context.fillRect(brick.x + 7, brick.y + 4, BRICK_WIDTH - 14, 2)
+    if (brick.hits > 1) {
+      context.fillStyle = '#fff'
+      context.font = 'bold 11px system-ui, sans-serif'
+      context.textAlign = 'center'
+      context.fillText(String(brick.hits), brick.x + BRICK_WIDTH / 2, brick.y + 15)
+    }
   }
 
-  context.fillStyle = '#34342d'
+  for (const drop of scene.drops) {
+    const color = drop.type === 'wide' ? '#5c8ee8' : drop.type === 'slow' ? '#75b8ad' : '#ef745b'
+    const icon = drop.type === 'wide' ? '↔' : drop.type === 'slow' ? 'Ⅱ' : '✦'
+    context.fillStyle = color
+    context.beginPath()
+    context.roundRect(drop.x - 11, drop.y - 11, 22, 22, 7)
+    context.fill()
+    context.fillStyle = '#fff'
+    context.font = '900 14px system-ui, sans-serif'
+    context.textAlign = 'center'
+    context.fillText(icon, drop.x, drop.y + 5)
+  }
+
+  const ballSpeed = Math.hypot(scene.ballVX, scene.ballVY)
+  if (ballSpeed > 190) {
+    context.save()
+    for (let index = 4; index > 0; index -= 1) {
+      const trail = index / 5
+      context.globalAlpha = (1 - trail) * Math.min(0.48, ballSpeed / 1450)
+      context.fillStyle = '#ef745b'
+      context.beginPath()
+      context.arc(scene.ballX - scene.ballVX * trail * 0.014, scene.ballY - scene.ballVY * trail * 0.014, 8 * (1 - trail * 0.55), 0, Math.PI * 2)
+      context.fill()
+    }
+    context.restore()
+  }
+
+  context.fillStyle = scene.paddleFlash > 0 ? '#f0785d' : '#34342d'
   context.beginPath()
-  context.roundRect(scene.paddleX, HEIGHT - 39, PADDLE_WIDTH, PADDLE_HEIGHT, 7)
+  context.roundRect(scene.paddleX, HEIGHT - 39, scene.paddleWidth, PADDLE_HEIGHT, 7)
   context.fill()
-  context.fillStyle = '#ef745b'
+  context.fillStyle = scene.boost === 'fire' ? '#ffc64c' : '#ef745b'
   context.beginPath()
   context.arc(scene.ballX, scene.ballY, 8, 0, Math.PI * 2)
   context.fill()
@@ -67,6 +167,37 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene) {
   context.beginPath()
   context.arc(scene.ballX, scene.ballY, 15, 0, Math.PI * 2)
   context.fill()
+
+  for (const particle of scene.particles) {
+    context.globalAlpha = Math.max(0, particle.life / particle.duration)
+    context.fillStyle = particle.color
+    context.beginPath()
+    context.arc(particle.x, particle.y, 2 + 2 * particle.life / particle.duration, 0, Math.PI * 2)
+    context.fill()
+  }
+  context.globalAlpha = 1
+
+  if (scene.boost && scene.boostTimer > 0) {
+    const title = boostLabels[scene.boost]
+    context.fillStyle = '#34342d'
+    context.beginPath()
+    context.roundRect(42, HEIGHT - 66, 130, 22, 7)
+    context.fill()
+    context.fillStyle = '#fff'
+    context.font = '800 9px system-ui, sans-serif'
+    context.textAlign = 'left'
+    context.fillText(title, 51, HEIGHT - 51)
+    context.fillStyle = '#ef745b'
+    context.fillRect(42, HEIGHT - 43, 130 * Math.max(0, scene.boostTimer / BOOST_DURATION), 3)
+  }
+
+  if (scene.combo >= 2) {
+    const multiplier = Math.min(5, 1 + Math.floor((scene.combo - 1) / 3))
+    context.fillStyle = '#55574d'
+    context.font = '800 13px system-ui, sans-serif'
+    context.textAlign = 'right'
+    context.fillText(`${scene.combo} ${streakLabel}  ×${multiplier}`, WIDTH - 45, HEIGHT - 54)
+  }
 }
 
 function readNickname(fallback: string) {
@@ -91,12 +222,12 @@ function readRecords() {
 
 export function Game({ locale }: GameProps) {
   const copy = locale === 'pl' ? {
-    headline: 'Zbij wszystkie klocki.', score: 'WYNIK', ready: 'Gotowy na rundę?', paused: 'Gra wstrzymana', over: 'Koniec gry',
-    goal: 'Zbij klocki. Nie zgub piłki.', resume: 'Wznów grę', again: 'Zagraj ponownie', start: 'Start', save: 'Zapisz wynik',
+    headline: 'Jak długo dasz radę?', mode: 'TRYB BEZ KOŃCA', score: 'WYNIK', wave: 'FALA', lives: 'ŻYCIA', ready: 'Gotowy na pierwszą falę?', paused: 'Gra wstrzymana', over: 'Koniec gry',
+    goal: 'Utrzymuj piłkę w grze. Co trzy trafienia rośnie mnożnik; kolejne fale przyspieszają.', boostHelp: 'Złap spadające bonusy: szersza pałka, wolniejsza piłka lub ognista kula.', boostLabels: { wide: 'SZERSZA PAŁKA', slow: 'WOLNIEJSZA PIŁKA', fire: 'OGNISTA KULA' }, streak: 'SERIA TRAFIEŃ', combo: 'SERIA', resume: 'Wznów grę', again: 'Zagraj ponownie', start: 'Zacznij grę', save: 'Zapisz wynik',
     highScores: 'NAJLEPSZE WYNIKI', nickname: 'PSEUDONIM', empty: 'Zagraj i zapisz pierwszy wynik.', local: 'ZAPISANO NA TYM URZĄDZENIU', move: 'STERUJ PAŁKĄ', left: 'Przesuń pałkę w lewo', right: 'Przesuń pałkę w prawo',
   } : {
-    headline: 'Keep it bouncing.', score: 'SCORE', ready: 'Ready to break out?', paused: 'Game paused', over: 'Game over',
-    goal: 'Clear the bricks. Keep the ball.', resume: 'Resume game', again: 'Play again', start: 'Start game', save: 'Save score',
+    headline: 'How long can you last?', mode: 'ENDLESS MODE', score: 'SCORE', wave: 'WAVE', lives: 'LIVES', ready: 'Ready for the first wave?', paused: 'Game paused', over: 'Run over',
+    goal: 'Keep the ball alive. Every three hits raises your multiplier; each wave gets faster.', boostHelp: 'Catch falling boosts: a wider paddle, slower ball, or fireball.', boostLabels: { wide: 'WIDE PADDLE', slow: 'SLOW BALL', fire: 'FIREBALL' }, streak: 'HIT STREAK', combo: 'STREAK', resume: 'Resume game', again: 'Play again', start: 'Start endless run', save: 'Save score',
     highScores: 'HIGH SCORES', nickname: 'NICKNAME', empty: 'Play a round and save your first score.', local: 'SAVED ON THIS DEVICE', move: 'MOVE PADDLE', left: 'Move paddle left', right: 'Move paddle right',
   }
   const fallbackName = locale === 'pl' ? 'Gracz' : 'Player'
@@ -106,6 +237,9 @@ export function Game({ locale }: GameProps) {
   const scoreRef = useRef(0)
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready')
   const [score, setScore] = useState(0)
+  const [wave, setWave] = useState(1)
+  const [lives, setLives] = useState(START_LIVES)
+  const [combo, setCombo] = useState(0)
   const [nickname, setNickname] = useState(fallbackName)
   const [records, setRecords] = useState<ScoreEntry[]>([])
   const [saved, setSaved] = useState(false)
@@ -122,7 +256,7 @@ export function Game({ locale }: GameProps) {
     const drawingContext = context
 
     if (status !== 'playing') {
-      renderScene(drawingContext, sceneRef.current)
+      renderScene(drawingContext, sceneRef.current, copy.boostLabels, copy.streak)
       return
     }
 
@@ -146,15 +280,58 @@ export function Game({ locale }: GameProps) {
     function frame(time: number) {
       const delta = Math.min((time - (previousTime || time)) / 1000, 0.034)
       previousTime = time
-      const speed = 450
+      const speed = 590
       if (keysRef.current.left) scene.paddleX -= speed * delta
       if (keysRef.current.right) scene.paddleX += speed * delta
-      scene.paddleX = Math.max(38, Math.min(WIDTH - 38 - PADDLE_WIDTH, scene.paddleX))
+      scene.paddleX = Math.max(38, Math.min(WIDTH - 38 - scene.paddleWidth, scene.paddleX))
 
+      scene.paddleFlash = Math.max(0, scene.paddleFlash - delta)
+      if (scene.boostTimer > 0) {
+        scene.boostTimer -= delta
+        if (scene.boostTimer <= 0) {
+          clearBoost(scene)
+        }
+      }
+
+      for (let index = scene.drops.length - 1; index >= 0; index -= 1) {
+        const drop = scene.drops[index]
+        drop.y += drop.vy * delta
+        if (drop.y + 11 >= HEIGHT - 39 && drop.y - 11 <= HEIGHT - 26 && drop.x >= scene.paddleX - 11 && drop.x <= scene.paddleX + scene.paddleWidth + 11) {
+          applyBoost(scene, drop.type)
+          addBurst(scene, drop.x, drop.y, drop.type === 'wide' ? '#5c8ee8' : drop.type === 'slow' ? '#75b8ad' : '#ef745b', 10)
+          scene.drops.splice(index, 1)
+        } else if (drop.y > HEIGHT + 12) {
+          scene.drops.splice(index, 1)
+        }
+      }
+      for (let index = scene.particles.length - 1; index >= 0; index -= 1) {
+        const particle = scene.particles[index]
+        particle.life -= delta
+        if (particle.life <= 0) {
+          scene.particles.splice(index, 1)
+        } else {
+          particle.x += particle.vx * delta
+          particle.y += particle.vy * delta
+          particle.vy += 320 * delta
+          particle.vx *= Math.max(0, 1 - 2.5 * delta)
+        }
+      }
+
+      const previousBallX = scene.ballX
+      const previousBallY = scene.ballY
       scene.ballX += scene.ballVX * delta
       scene.ballY += scene.ballVY * delta
-      if (scene.ballX < 39 || scene.ballX > WIDTH - 39) scene.ballVX *= -1
-      if (scene.ballY < 38) scene.ballVY = Math.abs(scene.ballVY)
+      if (scene.ballX < 39) {
+        scene.ballX = 39
+        scene.ballVX = Math.abs(scene.ballVX)
+      } else if (scene.ballX > WIDTH - 39) {
+        scene.ballX = WIDTH - 39
+        scene.ballVX = -Math.abs(scene.ballVX)
+      }
+      if (scene.ballY < 38) {
+        scene.ballY = 38
+        scene.ballVY = Math.abs(scene.ballVY)
+      }
 
       const paddleY = HEIGHT - 39
       if (
@@ -162,29 +339,85 @@ export function Game({ locale }: GameProps) {
         scene.ballY + 8 >= paddleY &&
         scene.ballY < paddleY + PADDLE_HEIGHT &&
         scene.ballX >= scene.paddleX - 7 &&
-        scene.ballX <= scene.paddleX + PADDLE_WIDTH + 7
+        scene.ballX <= scene.paddleX + scene.paddleWidth + 7
       ) {
-        const hitOffset = (scene.ballX - (scene.paddleX + PADDLE_WIDTH / 2)) / (PADDLE_WIDTH / 2)
-        scene.ballVY = -Math.abs(scene.ballVY)
-        scene.ballVX = hitOffset * 275
+        const hitOffset = Math.max(-0.84, Math.min(0.84, (scene.ballX - (scene.paddleX + scene.paddleWidth / 2)) / (scene.paddleWidth / 2)))
+        const ballSpeed = Math.hypot(scene.ballVX, scene.ballVY)
+        scene.ballVX = hitOffset * ballSpeed
+        scene.ballVY = -Math.sqrt(ballSpeed ** 2 - scene.ballVX ** 2)
+        scene.ballY = paddleY - 8
+        scene.paddleFlash = 0.12
+        addBurst(scene, scene.ballX, scene.ballY + 7, '#fffdf0', 5)
       }
 
       for (const brick of scene.bricks) {
         if (!brick.alive) continue
-        if (scene.ballX + 7 > brick.x && scene.ballX - 7 < brick.x + BRICK_WIDTH && scene.ballY + 7 > brick.y && scene.ballY - 7 < brick.y + BRICK_HEIGHT) {
-          brick.alive = false
-          scene.ballVY *= -1
-          scoreRef.current += 10
+        const overlaps = scene.ballX + 7 > brick.x && scene.ballX - 7 < brick.x + BRICK_WIDTH && scene.ballY + 7 > brick.y && scene.ballY - 7 < brick.y + BRICK_HEIGHT
+        const overlappedBefore = previousBallX + 7 > brick.x && previousBallX - 7 < brick.x + BRICK_WIDTH && previousBallY + 7 > brick.y && previousBallY - 7 < brick.y + BRICK_HEIGHT
+        if (overlaps && !(scene.boost === 'fire' && overlappedBefore)) {
+          brick.hits -= 1
+          brick.alive = brick.hits > 0
+          if (scene.boost !== 'fire') {
+            if (previousBallY + 7 <= brick.y || previousBallY - 7 >= brick.y + BRICK_HEIGHT) {
+              scene.ballVY *= -1
+              scene.ballY = previousBallY < brick.y ? brick.y - 7 : brick.y + BRICK_HEIGHT + 7
+            } else {
+              scene.ballVX *= -1
+              scene.ballX = previousBallX < brick.x ? brick.x - 7 : brick.x + BRICK_WIDTH + 7
+            }
+          }
+          scene.combo += 1
+          setCombo(scene.combo)
+          const multiplier = Math.min(5, 1 + Math.floor((scene.combo - 1) / 3))
+          scoreRef.current += 10 * multiplier
           setScore(scoreRef.current)
+          addBurst(scene, scene.ballX, scene.ballY, brick.color, brick.alive ? 4 : 9)
+          if (!brick.alive && Math.random() < DROP_CHANCE) {
+            const types: BoostType[] = ['wide', 'slow', 'fire']
+            const type = types[Math.floor(Math.random() * types.length)]
+            scene.drops.push({ x: brick.x + BRICK_WIDTH / 2, y: brick.y + BRICK_HEIGHT / 2, vy: 145, type })
+          }
           break
         }
       }
 
-      renderScene(drawingContext, scene)
-      if (scene.ballY > HEIGHT + 6 || scene.bricks.every((brick) => !brick.alive)) {
-        setStatus('over')
-        return
+      if (scene.ballY > HEIGHT + 6) {
+        scene.lives -= 1
+        setLives(scene.lives)
+        scene.combo = 0
+        setCombo(0)
+        if (scene.lives === 0) {
+          setStatus('over')
+          return
+        }
+        scene.ballX = WIDTH / 2
+        scene.ballY = HEIGHT - 76
+        const speed = scene.ballSpeed * (scene.boost === 'slow' ? SLOW_FACTOR : 1)
+        scene.ballVX = speed * 0.61
+        scene.ballVY = -speed * 0.79
+        scene.paddleX = WIDTH / 2 - scene.paddleWidth / 2
       }
+
+      if (scene.bricks.every((brick) => !brick.alive)) {
+        scene.wave += 1
+        scene.ballSpeed = Math.min(660, scene.ballSpeed * 1.075)
+        scene.paddleBaseWidth = Math.max(MIN_PADDLE_WIDTH, scene.paddleBaseWidth - 3)
+        resizePaddle(scene, scene.paddleBaseWidth * (scene.boost === 'wide' ? WIDE_FACTOR : 1))
+        scene.bricks = createBricks(scene.wave)
+        scene.combo = 0
+        setCombo(0)
+        scene.ballX = WIDTH / 2
+        scene.ballY = HEIGHT - 76
+        const speed = scene.ballSpeed * (scene.boost === 'slow' ? SLOW_FACTOR : 1)
+        scene.ballVX = speed * 0.61
+        scene.ballVY = -speed * 0.79
+        scene.paddleX = WIDTH / 2 - scene.paddleWidth / 2
+        scoreRef.current += 100 * (scene.wave - 1)
+        setScore(scoreRef.current)
+        setWave(scene.wave)
+      }
+
+      renderScene(drawingContext, scene, copy.boostLabels, copy.streak)
       animationFrame = requestAnimationFrame(frame)
     }
 
@@ -198,11 +431,14 @@ export function Game({ locale }: GameProps) {
       window.removeEventListener('keyup', handleKeyUp)
       keysRef.current = { left: false, right: false }
     }
-  }, [status])
+  }, [status, locale])
 
   function startGame() {
     scoreRef.current = 0
     setScore(0)
+    setWave(1)
+    setLives(START_LIVES)
+    setCombo(0)
     setSaved(false)
     sceneRef.current = createScene()
     setStatus('playing')
@@ -227,8 +463,13 @@ export function Game({ locale }: GameProps) {
     <div className="module-game brick-game">
       <div className="module-game-main">
         <div className="module-game-heading">
-          <div><span className="game-small-label">BRICK BREAKER</span><h2>{copy.headline}</h2></div>
-          <div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div>
+          <div><span className="game-small-label">{copy.mode}</span><h2>{copy.headline}</h2></div>
+          <div className="brick-run-stats">
+            <div className="score-readout"><span>{copy.wave}</span><strong>{wave.toString().padStart(2, '0')}</strong></div>
+            <div className="score-readout"><span>{copy.lives}</span><strong>{lives}</strong></div>
+            <div className="score-readout"><span>{copy.combo}</span><strong>×{Math.min(5, 1 + Math.floor(Math.max(0, combo - 1) / 3))}</strong></div>
+            <div className="score-readout"><span>{copy.score}</span><strong>{score.toString().padStart(3, '0')}</strong></div>
+          </div>
         </div>
         <div className="canvas-wrap">
           <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="Brick Breaker play field" />
@@ -247,6 +488,7 @@ export function Game({ locale }: GameProps) {
           <span>{copy.move}</span>
           <button aria-label={copy.right} onPointerDown={() => hold('right', true)} onPointerUp={() => hold('right', false)} onPointerCancel={() => hold('right', false)} onPointerLeave={() => hold('right', false)}>→</button>
         </div>
+        <p className="game-boost-note">{copy.boostHelp}</p>
       </div>
       <aside className="game-scoreboard">
         <div className="scoreboard-heading"><span className="game-small-label">{copy.highScores}</span><span className="scoreboard-star">✳</span></div>
