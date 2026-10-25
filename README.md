@@ -34,3 +34,15 @@ Design for 15–30 minute sessions with responsive controls, varied challenges, 
 - Rooftop Runner — solo endless runner
 - Soccer Duel — solo vs bot or local two player sports game
 - Star Patrol — solo wave-based shooter
+- Asteroid Drift — direct or classic flight, splitting rocks, sector upgrades
+- Maze Chase — connected districts, pursuit personalities, power reversals
+- Block Cascade — falling blocks, hold, wall kicks, earned rescues
+- River Crossing — traffic, moving logs, turtle warnings, route choices
+- Blast Arena — solo bomb ladder or local best-of-five series
+- Bubble Tower — solo or cooperative capture-and-pop rooms
+- Barrel Ascent — climbing, barrel jumps, bolts, hammers, moving lifts
+- Formation Rescue — diving formations, captured pilots, dual fire, challenge waves
+- Coastal Rush — drifting, slipstream, overtake chains, scenic route forks
+- Iron Front — run-and-gun missions, weapon supplies, grenades, siege bosses, rovers
+
+The [arcade roadmap](docs/arcade-roadmap.md) records the ten classic inspirations and research sources. New games share optional game-only rendering/session helpers under `src/games/kit`; each keeps its engine, stage content, artwork, controls, and persistence adapter in its own module. Existing games remain available.

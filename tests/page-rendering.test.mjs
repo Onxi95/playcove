@@ -84,12 +84,13 @@ test('Two-player discovery includes football and paddle games, with their own cr
   const html = await render('src/pages/GenrePage.tsx', 'GenrePage', { locale: 'en', slug: 'two-player' })
   assert.ok(html.includes('href="/en/games/paddle-duel"'))
   assert.ok(html.includes('href="/en/games/soccer-duel"'))
-  assert.equal((html.match(/data-game=/g) ?? []).length, 2)
+  assert.equal((html.match(/data-game=/g) ?? []).length, 9)
+  for (const game of ['blast-arena', 'bubble-tower', 'volley-clash', 'tank-tactics', 'ricochet-rivals', 'circuit-clash', 'twin-tethers']) assert.ok(html.includes(`/en/games/${game}`))
 })
 
 test('Actual React server rendering keeps all games browser-API-free until hydration', async () => {
   const render = await createRenderer()
-  for (const game of ['brick-breaker', 'neon-snake', 'rooftop-runner', 'star-patrol', 'paddle-duel', 'soccer-duel']) {
+  for (const game of ['brick-breaker', 'neon-snake', 'rooftop-runner', 'star-patrol', 'paddle-duel', 'soccer-duel', 'asteroid-drift', 'maze-chase', 'block-cascade', 'river-crossing', 'blast-arena', 'bubble-tower', 'barrel-ascent', 'formation-rescue', 'coastal-rush', 'iron-front', 'volley-clash', 'tank-tactics', 'ricochet-rivals', 'circuit-clash', 'twin-tethers']) {
     const html = await render(`src/games/${game}/Game.tsx`, 'Game', { locale: 'pl' })
     assert.ok(html.includes('<canvas') && html.includes('game-start-screen'))
     assert.ok(html.includes('game-records-panel'))

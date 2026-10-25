@@ -346,3 +346,97 @@
   .game-records-panel > summary { right: 128px; min-width: 32px; padding-inline: 7px; }
   .game-records-panel > summary > span:last-child { display: none; }
 }
+
+.arcade-host { --play-accent: #c4d7bc; --play-surface: #142730; --play-ink: #edf0df; }
+.arcade-host .canvas-wrap { background: var(--play-surface); }
+.arcade-host canvas { display: block; width: 100%; height: auto; touch-action: none; }
+.arcade-game-stats { display: flex; gap: clamp(12px, 3cqi, 36px); align-items: center; }
+.arcade-host .score-readout strong { font-variant-numeric: tabular-nums; }
+.arcade-livebar { display: flex; justify-content: space-between; gap: 16px; padding: 12px 20px; color: #bdcec6; font: 600 10px/1.5 var(--mono); letter-spacing: .05em; background: #11242d; }
+.arcade-livebar span:last-child { white-space: nowrap; }
+.arcade-controls-note { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 12px 4px; }
+.arcade-choice-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 28px; background: #10252eee; color: #edf0df; }
+.arcade-choice-screen h2 { font-size: clamp(24px, 5cqi, 46px); margin: 0; }
+.game-choice-eyebrow, .arcade-choice-screen > small { font: 600 11px/1.6 var(--mono); letter-spacing: .08em; color: #b4c9c2; }
+.arcade-choice-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; width: min(100%,720px); }
+.arcade-choice-grid button { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 20px; border: 1px solid #72948c66; border-radius: 8px; color: #edf0df; background: #28433f; text-align: left; cursor: pointer; }
+.arcade-choice-grid button:hover, .arcade-choice-grid button:focus-visible { border-color: #d9e5b4; background: #36544a; transform: translateY(-2px); }
+.arcade-choice-grid kbd { font: 600 12px var(--mono); opacity: .6; }
+.arcade-choice-grid strong { font-size: 17px; }
+.arcade-choice-grid span { font-size: 12px; line-height: 1.6; color: #c3d1c6; }
+.arcade-choice-grid b { align-self: flex-end; font-size: 24px; color: #d9e5b4; }
+.arcade-menu-settings { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; }
+.arcade-menu-settings button { display: grid; gap: 5px; max-width: 230px; padding: 12px 16px; border: 1px solid #9eb3ac55; border-radius: 7px; background: #ffffff08; color: inherit; cursor: pointer; text-align: left; }
+.arcade-menu-settings button[aria-pressed=true] { border-color: #c7d7a6; background: #b8d0aa15; }
+.arcade-menu-settings button span, .arcade-menu-settings p { font-size: 11px; line-height: 1.6; opacity: .7; }
+.arcade-menu-settings p { width: 100%; margin: 0; }
+.arcade-host-touch { grid-template-columns: repeat(6,1fr); }
+.block-cascade-game { --play-accent: #d8a58e; }
+.coastal-rush-game { --play-accent: #ddbb8c; }
+.iron-front-game { --play-accent: #c4cba0; }
+@container (max-width: 560px) {
+  .arcade-choice-screen { gap: 10px; padding: 15px; }
+  .arcade-choice-grid { gap: 6px; }
+  .arcade-choice-grid button { gap: 6px; padding: 10px; }
+  .arcade-choice-grid strong { font-size: 13px; }
+  .arcade-choice-grid span { font-size: 10px; }
+  .arcade-livebar { font-size: 8px; padding: 9px 12px; }
+}
+
+.arcade-host { --play-ink: #142521; }
+.asteroid-drift-game { --game-ratio: 1.5625; }
+.block-cascade-game { --game-ratio: 1.16923; }
+.maze-chase-game { --game-ratio: .90476; }
+.river-crossing-game { --game-ratio: .92857; }
+.blast-arena-game { --game-ratio: 1.18182; }
+.bubble-tower-game { --game-ratio: 1.33333; }
+.barrel-ascent-game { --game-ratio: 1.31148; }
+.formation-rescue-game { --game-ratio: 1.45161; }
+.coastal-rush-game { --game-ratio: 1.6; }
+.iron-front-game { --game-ratio: 1.60714; }
+.coastal-rush-game { --game-ratio: 1.61765; --play-accent: #edc395; --play-surface: #193744; }
+.arcade-host-touch { display: flex; gap: 6px; }
+.arcade-host-touch button { flex: 1; min-width: 0; font-size: 11px; touch-action: none; }
+.arcade-choice-screen { overflow-y: auto; }
+@media (prefers-reduced-motion: reduce) { .arcade-choice-grid button:hover, .arcade-choice-grid button:focus-visible { transform: none; } }
+.arcade-choice-grid:has(> button:only-child) { grid-template-columns: 1fr; max-width: 340px; }
+.arcade-choice-grid:has(> button:nth-child(2):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 560px; }
+.volley-clash-game { --game-ratio: 1.6129; --play-accent: #ecc197; --play-surface: #254654; }
+.tank-tactics-game { --game-ratio: 1.6129; --play-accent: #d3d4a5; --play-surface: #263f4c; }
+.ricochet-rivals-game { --game-ratio: 1.6129; --play-accent: #a8d6de; --play-surface: #163644; }
+.circuit-clash-game { --game-ratio: 1.53846; --play-accent: #e5b79a; --play-surface: #263f43; }
+.twin-tethers-game { --game-ratio: 1.6129; --play-accent: #c8d9af; --play-surface: #2b4c56; }
+.arcade-host-touch:empty { display: none; }
+.touch-deck { display: grid; width: 100%; gap: 10px; padding: 10px 2px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
+.touch-control-group { min-width: 0; display: grid; gap: 5px; }
+.touch-control-label { color: var(--color-muted); font: 600 10px var(--mono); letter-spacing: .04em; }
+.touch-control-buttons { display: grid; grid-auto-columns: minmax(44px, 1fr); grid-auto-flow: column; gap: 6px; }
+.touch-deck .touch-control-buttons button { width: 100%; min-width: 44px; min-height: 48px; height: 48px; padding: 0 4px; border-radius: 9px; font: 700 12px var(--font-ui); }
+.touch-deck .touch-control-group:nth-child(2) button { border-color: color-mix(in srgb, #79b7d3 45%, var(--color-line)); }
+.touch-deck .touch-control-group:first-child button { border-color: color-mix(in srgb, #d79a7d 45%, var(--color-line)); }
+.touch-deck button:active { color: #fff5dd; background: #294957; }
+@media (hover: hover) and (pointer: fine) { .touch-deck { display: none; } }
+@media (pointer: coarse), (max-width: 700px) {
+ .game-touch-controls button, .touch-player button, .soccer-touch-player button { min-width: 44px; min-height: 48px; height: 48px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+ .game-touch-controls { flex-wrap: wrap; }
+ .game-page.page-wrap { width: calc(100% - 16px); }
+ .touch-control-buttons { grid-auto-columns: minmax(0,1fr); gap: 4px; }
+ .touch-deck .touch-control-buttons button { min-width: 0; }
+ .soccer-touch-player { flex-wrap: wrap; }
+}
+@media (pointer: coarse) and (orientation: landscape) {
+ .arcade-host:fullscreen .module-game-main { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 8px; align-items: center; width: 100%; height: 100dvh; padding: 4px; overflow: auto; }
+ .arcade-host:fullscreen .canvas-wrap { width: min(100%,calc((100dvh - 52px) * var(--game-ratio))); min-height: 0; }
+ .arcade-host:fullscreen .game-frame-bar { --game-bar-height: 44px; height: 44px; min-height: 44px; padding: 6px; flex-direction: row; }
+ .arcade-host:fullscreen .game-frame-bar > div:first-child { display: none; }
+ .arcade-host:fullscreen .game-overlay { top: 44px; }
+ .arcade-host:fullscreen .arcade-livebar, .arcade-host:fullscreen .arcade-controls-note { display: none; }
+ .arcade-host:fullscreen .touch-deck { align-content: center; padding: 0; }
+ .arcade-host:fullscreen .touch-control-buttons { grid-template-columns: repeat(3,minmax(0,1fr)); grid-auto-flow: row; gap: 4px; }
+ .arcade-host:fullscreen .touch-deck button { min-height: 44px; height: 44px; }
+ .arcade-host:fullscreen .game-screen-tools { top: 5px; right: 5px; }
+}
+.touch-control-buttons-many { grid-template-columns: repeat(4,minmax(0,1fr)); grid-auto-flow: row; }
+@media (min-width: 700px) and (pointer: coarse) { .touch-deck-dual { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; } }
+@media (pointer: coarse) and (orientation: landscape) { .arcade-host:fullscreen .touch-deck-dual { grid-template-columns: 1fr; } }
+@media (any-pointer: coarse) { .touch-deck { display: grid; padding-bottom: max(10px, env(safe-area-inset-bottom)); } }

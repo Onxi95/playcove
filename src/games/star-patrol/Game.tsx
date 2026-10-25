@@ -1,3 +1,5 @@
+import { TouchControls } from '../kit/TouchControls.tsx'
+import { planet, spacecraft, bevel, orb, polygon } from '../kit/art.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
@@ -49,6 +51,7 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   context.clearRect(0, 0, WIDTH, HEIGHT)
   context.fillStyle = '#11183e'
   context.fillRect(0, 0, WIDTH, HEIGHT)
+  planet(context,WIDTH-120,HEIGHT*.48,110,'#657aa1',true)
   for (let index = 0; index < 68; index += 1) {
     const x = (index * 149 + 17) % WIDTH
     const baseY = (index * 83 + 31) % HEIGHT
@@ -71,6 +74,8 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
       context.beginPath()
       context.roundRect(enemy.x - 62, enemy.y - 26, 124, 50, 15)
       context.fill()
+      bevel(context,enemy.x-62,enemy.y-26,124,50,enemy.hits<enemy.maxHits/2?'#df8899':'#b39edc',15);
+      for(const side of[-1,1]){bevel(context,enemy.x+side*51-11,enemy.y+10,22,23,'#7c89b9',4);orb(context,enemy.x+side*51,enemy.y+27,5,'#d5e8c8')}
       context.fillStyle = '#ffe2a4'
       context.fillRect(enemy.x - 36, enemy.y - 11, 72, 8)
       context.fillStyle = '#ffffff25'
@@ -100,6 +105,7 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
     context.lineTo(enemy.x - 15, enemy.y + 10)
     context.closePath()
     context.fill()
+    polygon(context,[enemy.x,enemy.y-14,enemy.x+6,enemy.y-4,enemy.x,enemy.y+9,enemy.x-6,enemy.y-4],'#ffffff44')
     context.fillStyle = '#1c264c'
     context.fillRect(enemy.x - 9, enemy.y - 6, 5, 4)
     context.fillRect(enemy.x + 4, enemy.y - 6, 5, 4)
@@ -152,16 +158,7 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   }
   const blink = scene.invulnerable > 0 && Math.floor(time / 80) % 2 === 0
   if (!blink) {
-    context.fillStyle = '#8ac9ff'
-    context.beginPath()
-    context.moveTo(scene.shipX, SHIP_Y - 20)
-    context.lineTo(scene.shipX + 22, SHIP_Y + 17)
-    context.lineTo(scene.shipX + 9, SHIP_Y + 13)
-    context.lineTo(scene.shipX, SHIP_Y + 21)
-    context.lineTo(scene.shipX - 9, SHIP_Y + 13)
-    context.lineTo(scene.shipX - 22, SHIP_Y + 17)
-    context.closePath()
-    context.fill()
+    spacecraft(context,scene.shipX,SHIP_Y,.92,'#aecfe2',false,scene.elapsed)
     context.fillStyle = '#fff1ac'
     context.beginPath()
     context.moveTo(scene.shipX - 6, SHIP_Y + 17)
@@ -498,8 +495,7 @@ export function Game({ locale }: GameProps) {
           </GamePanel>
           <GameOverlay gameName="STAR PATROL" onRestart={start} status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Zmieniaj pozycję po salwie. Zostaw sobie drogę ucieczki.' : 'Move after each volley. Keep an escape route open.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.wave, value: wave }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }, { label: locale === 'pl' ? 'ZESTRZELENIA' : 'DESTROYED', value: sceneRef.current.kills }] }} />
         </div>
-        <div className="game-touch-controls star-touch-controls"><button onPointerDown={() => hold('left', true)} onPointerUp={() => hold('left', false)} onPointerCancel={() => hold('left', false)} onPointerLeave={() => hold('left', false)} aria-label={locale === 'pl' ? 'W lewo' : 'Move left'}>←</button><button disabled={status !== 'playing' || pulseEnergy < 100} onPointerDown={() => hold('fire', true)} onPointerUp={() => hold('fire', false)} onPointerCancel={() => hold('fire', false)} onPointerLeave={() => hold('fire', false)} aria-label={copy.fire}>✦</button><button onPointerDown={() => hold('right', true)} onPointerUp={() => hold('right', false)} onPointerCancel={() => hold('right', false)} onPointerLeave={() => hold('right', false)} aria-label={locale === 'pl' ? 'W prawo' : 'Move right'}>→</button></div>
-        <p className="arcade-controls-note"><span>{copy.move} <kbd>←</kbd> <kbd>→</kbd> <kbd>A</kbd> <kbd>D</kbd></span><span>{copy.fire} <kbd>SPACE</kbd></span></p>
+        <TouchControls locale={locale} enabled={status==='playing'} groups={[{label:locale==='pl'?'Automatyczny ostrzał':'Automatic fire',buttons:[['←','left'],['✦ '+copy.fire,'fire'],['→','right']]}]} onCancel={()=>setStatus('paused')} onKey={(key,pressed)=>{if(key==='left'||key==='right'||key==='fire')hold(key,pressed)}} />
       </div>
 
     </div>

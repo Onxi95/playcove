@@ -2,14 +2,14 @@ import type { GameManifest } from '../contract.ts'
 
 export const manifest = {
   en: {
-    slug: 'paddle-duel', name: 'Paddle Duel', description: 'A table-tennis match on one keyboard. Steer rallies through boost orbs and play to seven, winning by two.',
+    slug: 'paddle-duel', name: 'Paddle Duel', description: 'Play table tennis against a computer or a friend on one keyboard. Steer rallies through boost orbs and play to seven, winning by two.',
     localMultiplayer: true,
-    genreSlug: 'two-player', players: '2 players', playTime: '15+ min', accent: 'blue', controls: 'Player 1: W / S. Player 2: ↑ / ↓. Paddle movement steers each return; cross the court center to collect boosts.',
+    genreSlug: 'two-player', players: '1–2 players', playTime: '15+ min', accent: 'blue', controls: 'Player 1: W / S. Player 2: ↑ / ↓. Paddle movement steers each return; cross the court center to collect boosts.',
   },
   pl: {
-    slug: 'paddle-duel', name: 'Paddle Duel', description: 'Mecz tenisa stołowego na jednej klawiaturze. Kieruj piłkę przez bonusy i graj do siedmiu z przewagą dwóch.',
+    slug: 'paddle-duel', name: 'Paddle Duel', description: 'Tenis stołowy z komputerem lub znajomym na jednej klawiaturze. Kieruj piłkę przez bonusy i graj do siedmiu z przewagą dwóch.',
     localMultiplayer: true,
-    genreSlug: 'two-player', players: '2 graczy', playTime: '15+ min', accent: 'blue', controls: 'Gracz 1: W / S. Gracz 2: ↑ / ↓. Ruch pałki kieruje piłką; przetnij środek kortu, by zebrać bonus.',
+    genreSlug: 'two-player', players: '1–2 graczy', playTime: '15+ min', accent: 'blue', controls: 'Gracz 1: W / S. Gracz 2: ↑ / ↓. Ruch pałki kieruje piłką; przetnij środek kortu, by zebrać bonus.',
   },
 } satisfies Record<'en' | 'pl', GameManifest>
 

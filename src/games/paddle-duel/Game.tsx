@@ -1,3 +1,7 @@
+import { opponentModes, opponentMode, skill } from '../kit/opponent.ts'
+import type { OpponentMode } from '../kit/opponent.ts'
+import { TouchControls } from '../kit/TouchControls.tsx'
+import { bevel, orb } from '../kit/art.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
@@ -81,10 +85,10 @@ function grantBoost(match: Match, player: 0 | 1, boost: BoostType) {
 
 function drawMatch(context: CanvasRenderingContext2D, match: Match, pointLabel: string, rallyLabel: string, boostLabels: Record<BoostType, string>) {
   context.clearRect(0, 0, WIDTH, HEIGHT)
-  context.fillStyle = '#e8edf5'
-  context.fillRect(0, 0, WIDTH, HEIGHT)
-  context.fillStyle = 'rgba(255,255,255,.47)'
-  context.fillRect(20, 18, WIDTH - 40, HEIGHT - 36)
+  const surface=context.createRadialGradient(WIDTH/2,HEIGHT/2,20,WIDTH/2,HEIGHT/2,WIDTH*.65);surface.addColorStop(0,'#243c53');surface.addColorStop(1,'#102334');context.fillStyle=surface;context.fillRect(0,0,WIDTH,HEIGHT);
+  context.strokeStyle='#9dc4cf22';context.lineWidth=1;context.strokeRect(20,18,WIDTH-40,HEIGHT-36);context.beginPath();context.arc(WIDTH/2,HEIGHT/2,80,0,Math.PI*2);context.stroke();
+  for(const side of[0,1]){const x=side?WIDTH-20:17;bevel(context,x,35,3,HEIGHT-70,side?'#84b5df':'#e4a38c',1)}
+  for(let y=45;y<HEIGHT-35;y+=36){context.fillStyle='#d5ded212';context.fillRect(25,y,8,1);context.fillRect(WIDTH-33,y,8,1)}
   context.strokeStyle = 'rgba(75,105,169,.25)'
   context.setLineDash([8, 12])
   context.lineWidth = 3
@@ -96,7 +100,7 @@ function drawMatch(context: CanvasRenderingContext2D, match: Match, pointLabel: 
 
   context.font = '700 43px sans-serif'
   context.textAlign = 'center'
-  context.fillStyle = 'rgba(75,105,169,.2)'
+  context.fillStyle = '#a4bacb44'
   context.fillText(String(match.p1).padStart(2, '0'), WIDTH / 2 - 75, 88)
   context.fillText(String(match.p2).padStart(2, '0'), WIDTH / 2 + 75, 88)
 
@@ -123,6 +127,8 @@ function drawMatch(context: CanvasRenderingContext2D, match: Match, pointLabel: 
   context.roundRect(WIDTH - 37 - PADDLE_W, match.rightY, PADDLE_W, paddleHeight(match.p2Boost), 7)
   context.fill()
 
+  bevel(context,37,match.leftY,PADDLE_W,paddleHeight(match.p1Boost),match.leftFlash>0?'#ffe0be':'#ed9d83',7);
+  bevel(context,WIDTH-37-PADDLE_W,match.rightY,PADDLE_W,paddleHeight(match.p2Boost),match.rightFlash>0?'#d8e9ff':'#8cb8e7',7);
   if (match.p1Boost) {
     context.fillStyle = '#ed705a'
     context.font = '800 9px system-ui, sans-serif'
@@ -163,6 +169,7 @@ function drawMatch(context: CanvasRenderingContext2D, match: Match, pointLabel: 
   context.arc(match.ballX, match.ballY, BALL_RADIUS, 0, Math.PI * 2)
   context.fill()
 
+  orb(context,match.ballX,match.ballY,BALL_RADIUS,'#f2d28a')
   for (const particle of match.particles) {
     context.globalAlpha = Math.max(0, particle.life / particle.duration)
     context.fillStyle = particle.color
@@ -229,10 +236,13 @@ export function Game({ locale }: GameProps) {
   const [initialScene] = useState(createMatch)
   const matchRef = useRef(initialScene)
   const keysRef = useRef({ p1Up: false, p1Down: false, p2Up: false, p2Down: false })
+  const [mode,setMode]=useState<OpponentMode>('local')
+  const botRef=useRef({target:HEIGHT/2,timer:0})
   const [status, setStatus] = useState<'ready' | 'playing' | 'paused' | 'over'>('ready')
   const [score, setScore] = useState({ p1: 0, p2: 0 })
   const [p1Name, setP1Name] = useState(p1Fallback)
   const [p2Name, setP2Name] = useState(p2Fallback)
+  const p2Label=mode==='local'?(p2Name.trim()||p2Fallback):(locale==='pl'?'Komputer':'Computer')
   const [records, setRecords] = useState<MatchRecord[]>([])
   const [saved, setSaved] = useState(false)
   const [series, setSeries] = useState<[number, number]>([0, 0])
@@ -248,7 +258,9 @@ export function Game({ locale }: GameProps) {
     setP1Name(readName('playcove.paddle-duel.player-1', p1Fallback))
     setP2Name(readName('playcove.paddle-duel.player-2', p2Fallback))
     setRecords(readRecords())
+    setMode(opponentMode(readName('playcove.paddle-duel.mode','local')))
   }, [])
+  useEffect(()=>{try{localStorage.setItem('playcove.paddle-duel.mode',mode)}catch{}},[mode])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -331,6 +343,11 @@ export function Game({ locale }: GameProps) {
       const p2Height = paddleHeight(match.p2Boost)
       const p1Speed = 385 * (match.p1Boost === 'dash' ? 1.5 : 1)
       const p2Speed = 385 * (match.p2Boost === 'dash' ? 1.5 : 1)
+      if(mode!=='local'){
+        const level=skill(mode),bot=botRef.current;bot.timer-=delta
+        if(bot.timer<=0){bot.timer=[.24,.14,.065][level];let target=HEIGHT/2;if(match.ballVX>0){const duration=(WIDTH-50-match.ballX)/Math.max(1,match.ballVX),lo=32+BALL_RADIUS,range=HEIGHT-64-BALL_RADIUS*2,raw=match.ballY+match.ballVY*duration-lo,fold=((raw%(range*2))+range*2)%(range*2);target=lo+(fold>range?range*2-fold:fold)}bot.target=target+Math.sin(time/430)*[24,10,2][level]}
+        keysRef.current.p2Up=match.rightY+p2Height/2>bot.target+7;keysRef.current.p2Down=match.rightY+p2Height/2<bot.target-7
+      }
       const previousLeftY = match.leftY
       const previousRightY = match.rightY
       if (keysRef.current.p1Up) match.leftY -= p1Speed * delta
@@ -447,7 +464,7 @@ export function Game({ locale }: GameProps) {
       window.removeEventListener('keyup', handleKeyUp)
       keysRef.current = { p1Up: false, p1Down: false, p2Up: false, p2Down: false }
     }
-  }, [status, locale, canvasRevision])
+  }, [status, locale, canvasRevision, mode])
 
   function startGame() {
     matchRef.current = createMatch()
@@ -458,8 +475,8 @@ export function Game({ locale }: GameProps) {
 
   function saveScore() {
     if (saved) return
-    const winner = score.p1 > score.p2 ? (p1Name.trim() || p1Fallback) : (p2Name.trim() || p2Fallback)
-    const next = [{ winner, final: `${score.p1}–${score.p2}`, p1: p1Name.trim() || p1Fallback, p2: p2Name.trim() || p2Fallback }, ...records].slice(0, 5)
+    const winner = score.p1 > score.p2 ? (p1Name.trim() || p1Fallback) : p2Label
+    const next = [{ winner, final: `${score.p1}–${score.p2}`, p1: p1Name.trim() || p1Fallback, p2: p2Label }, ...records].slice(0, 5)
     try {
       localStorage.setItem('playcove.paddle-duel.player-1', p1Name.trim() || p1Fallback)
       localStorage.setItem('playcove.paddle-duel.player-2', p2Name.trim() || p2Fallback)
@@ -476,7 +493,7 @@ export function Game({ locale }: GameProps) {
     if (player === 'p2' && direction === 'down') keysRef.current.p2Down = pressed
   }
 
-  const winner = score.p1 > score.p2 ? (p1Name.trim() || p1Fallback) : (p2Name.trim() || p2Fallback)
+  const winner = score.p1 > score.p2 ? (p1Name.trim() || p1Fallback) : p2Label
 
   return (
     <div className={`module-game paddle-game${status === 'playing' ? ' is-playing' : ''}`}>
@@ -485,7 +502,7 @@ export function Game({ locale }: GameProps) {
         <div className="canvas-wrap paddle-canvas-wrap">
         <div className="module-game-heading game-frame-bar">
           <div><span className="game-small-label">{copy.matchRule}</span><h2>PADDLE DUEL</h2></div>
-          <div className="paddle-scoreline"><span>{p1Name || p1Fallback}</span><strong>{score.p1} <i>:</i> {score.p2}</strong><span>{p2Name || p2Fallback}</span><small className="game-series-score">{locale === 'pl' ? 'SERIA' : 'SERIES'} {series[0]}–{series[1]}</small></div>
+          <div className="paddle-scoreline"><span>{p1Name || p1Fallback}</span><strong>{score.p1} <i>:</i> {score.p2}</strong><span>{p2Label}</span><small className="game-series-score">{locale === 'pl' ? 'SERIA' : 'SERIES'} {series[0]}–{series[1]}</small></div>
         </div>
           <canvas tabIndex={0} ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label={locale === 'pl' ? 'Boisko Paddle Duel' : 'Paddle Duel play field'} />
           <SoundToggle locale={locale} enabled={soundEnabled} onToggle={toggleSound} onPause={status === 'playing' ? () => setStatus('paused') : undefined} />
@@ -503,15 +520,9 @@ export function Game({ locale }: GameProps) {
         <div className="scoreboard-foot">{copy.local}</div>
       </aside>
           </GamePanel>
-          <GameOverlay gameName="PADDLE DUEL" onRestart={startGame} status={status} locale={locale} title={status === 'over' ? `${winner} ${copy.winSuffix}` : status === 'paused' ? copy.paused : copy.startTitle} description={status === 'over' ? (locale === 'pl' ? 'Rewanż? Serwis zaczyna nową wymianę, bonusy zdobywacie od nowa.' : 'Rematch? A fresh serve, fresh boosts, and another chance to settle it.') : copy.goal} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.rematch : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startGame} result={{ value: `${score.p1}–${score.p2}`, label: `${winner} ${copy.winSuffix}`, saved, stats: [{ label: locale === 'pl' ? 'NAJDŁUŻSZA WYMIANA' : 'LONGEST RALLY', value: matchRef.current.longestRally }, { label: locale === 'pl' ? 'SERIA MECZÓW' : 'SERIES', value: `${series[0]}–${series[1]}` }] }} />
+          <GameOverlay settings={status==='ready'?<div className="arcade-menu-settings">{opponentModes.map(option=><button key={option.id} aria-pressed={mode===option.id} onClick={()=>setMode(opponentMode(option.id))}><strong>{option.title[locale]}</strong><span>{option.detail[locale]}</span></button>)}</div>:undefined} gameName="PADDLE DUEL" onRestart={startGame} status={status} locale={locale} title={status === 'over' ? `${winner} ${copy.winSuffix}` : status === 'paused' ? copy.paused : copy.startTitle} description={status === 'over' ? (locale === 'pl' ? 'Rewanż? Serwis zaczyna nową wymianę, bonusy zdobywacie od nowa.' : 'Rematch? A fresh serve, fresh boosts, and another chance to settle it.') : copy.goal} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.rematch : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startGame} result={{ value: `${score.p1}–${score.p2}`, label: `${winner} ${copy.winSuffix}`, saved, stats: [{ label: locale === 'pl' ? 'NAJDŁUŻSZA WYMIANA' : 'LONGEST RALLY', value: matchRef.current.longestRally }, { label: locale === 'pl' ? 'SERIA MECZÓW' : 'SERIES', value: `${series[0]}–${series[1]}` }] }} />
         </div>
-        <div className="paddle-touch-controls">
-          <div className="touch-player touch-p1"><span>{copy.player(1).toUpperCase()}</span><button aria-label={`${copy.player(1)} ${copy.up}`} onPointerDown={() => hold('p1', 'up', true)} onPointerUp={() => hold('p1', 'up', false)} onPointerCancel={() => hold('p1', 'up', false)} onPointerLeave={() => hold('p1', 'up', false)}>↑</button><button aria-label={`${copy.player(1)} ${copy.down}`} onPointerDown={() => hold('p1', 'down', true)} onPointerUp={() => hold('p1', 'down', false)} onPointerCancel={() => hold('p1', 'down', false)} onPointerLeave={() => hold('p1', 'down', false)}>↓</button></div>
-          <span className="touch-vs">VS</span>
-          <div className="touch-player touch-p2"><span>{copy.player(2).toUpperCase()}</span><button aria-label={`${copy.player(2)} ${copy.up}`} onPointerDown={() => hold('p2', 'up', true)} onPointerUp={() => hold('p2', 'up', false)} onPointerCancel={() => hold('p2', 'up', false)} onPointerLeave={() => hold('p2', 'up', false)}>↑</button><button aria-label={`${copy.player(2)} ${copy.down}`} onPointerDown={() => hold('p2', 'down', true)} onPointerUp={() => hold('p2', 'down', false)} onPointerCancel={() => hold('p2', 'down', false)} onPointerLeave={() => hold('p2', 'down', false)}>↓</button></div>
-        </div>
-        <div className="module-controls-caption"><span>{copy.player(1).toUpperCase()} <kbd>W</kbd> <kbd>S</kbd></span><i /> <span>{copy.player(2).toUpperCase()} <kbd>↑</kbd> <kbd>↓</kbd></span></div>
-        <p className="game-boost-note">{copy.boostHelp}</p>
+        <TouchControls locale={locale} enabled={status==='playing'} groups={mode==='local'?[{label:copy.player(1),buttons:[['↑','p1-up'],['↓','p1-down']]},{label:copy.player(2),buttons:[['↑','p2-up'],['↓','p2-down']]}]:[{label:copy.player(1),buttons:[['↑','p1-up'],['↓','p1-down']]}]} onCancel={()=>setStatus('paused')} onKey={(key,pressed)=>{if(key==='p1-up')hold('p1','up',pressed);if(key==='p1-down')hold('p1','down',pressed);if(key==='p2-up')hold('p2','up',pressed);if(key==='p2-down')hold('p2','down',pressed)}} />
       </div>
 
     </div>

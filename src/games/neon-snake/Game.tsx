@@ -1,3 +1,5 @@
+import { TouchControls } from '../kit/TouchControls.tsx'
+import { orb } from '../kit/art.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
@@ -46,6 +48,8 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
     context.fillRect(index * CELL, (index % 2) * CELL, CELL, SIZE)
   }
 
+  context.strokeStyle='#99d7b433';context.lineWidth=2;context.strokeRect(1,1,SIZE-2,SIZE-2);
+  for(let y=0;y<CELLS;y++)for(let x=0;x<CELLS;x++){if((x*7+y*11)%17===0){context.fillStyle='#8abbab16';context.fillRect(x*CELL+3,y*CELL+3,2,2)}}
   if (scene.flash > 0) {
     context.fillStyle = `rgba(188,255,208,${scene.flash * 0.3})`
     context.fillRect(0, 0, SIZE, SIZE)
@@ -58,6 +62,8 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   context.beginPath()
   context.arc((scene.food.x + 0.5) * CELL, (scene.food.y + 0.5) * CELL, CELL * 0.29 * pulse, 0, Math.PI * 2)
   context.fill()
+  orb(context,(scene.food.x+.5)*CELL,(scene.food.y+.5)*CELL,CELL*.29*pulse,scene.food.golden?'#f0cb73':'#df8391','#fff2cb');
+  context.strokeStyle='#a7d6a2';context.lineWidth=2;context.beginPath();context.moveTo((scene.food.x+.5)*CELL,(scene.food.y+.5)*CELL-CELL*.23);context.quadraticCurveTo((scene.food.x+.7)*CELL,(scene.food.y+.1)*CELL,(scene.food.x+.8)*CELL,(scene.food.y+.3)*CELL);context.stroke();
   if (scene.bonus) {
     context.globalAlpha = Math.min(1, scene.goldenTimer / 1.4)
     context.fillStyle = '#ffd36a'
@@ -81,6 +87,9 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
     context.beginPath()
     context.roundRect(part.x * CELL + inset, part.y * CELL + inset, CELL - inset * 2, CELL - inset * 2, 7)
     context.fill()
+    const cx=(part.x+.5)*CELL,cy=(part.y+.5)*CELL;
+    context.fillStyle='#e9f9cf33';context.beginPath();context.roundRect(part.x*CELL+inset+3,part.y*CELL+inset+2,Math.max(1,CELL-inset*2-6),3,1.5);context.fill();
+    if(index>0){context.strokeStyle='#17483d33';context.lineWidth=1;context.beginPath();context.arc(cx,cy,4,.3,Math.PI-.3);context.stroke()}
   }
 
   const head = { x: scene.previousSnake[0].x + (scene.snake[0].x - scene.previousSnake[0].x) * progress, y: scene.previousSnake[0].y + (scene.snake[0].y - scene.previousSnake[0].y) * progress }
@@ -325,8 +334,7 @@ export function Game({ locale }: GameProps) {
           </GamePanel>
           <GameOverlay gameName="NEON SNAKE" onRestart={start} status={status} locale={locale} title={status === 'over' ? sceneRef.current.cleared ? locale === 'pl' ? 'Cała plansza zajęta!' : 'Board cleared!' : copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (sceneRef.current.cleared ? locale === 'pl' ? 'Perfekcyjny bieg. Każde pole planszy należy do Ciebie.' : 'A perfect run. Every cell is yours.' : sceneRef.current.crash === 'body' ? locale === 'pl' ? 'Wpadłeś na ogon. Zostaw sobie drogę odwrotu, zanim wybierzesz złoty owoc.' : 'Caught your own tail. Leave an exit before chasing the gold fruit.' : locale === 'pl' ? 'Koniec planszy. Zapisz dwa zakręty z wyprzedzeniem, by zacieśnić nawrót.' : 'Reached the wall. Queue two turns to make a tight escape.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.length, value: sceneRef.current.snake.length }, { label: locale === 'pl' ? 'OWOCE' : 'FRUIT', value: sceneRef.current.eaten }, { label: locale === 'pl' ? 'CZAS' : 'TIME', value: `${Math.floor(sceneRef.current.elapsed)}s` }] }} />
         </div>
-        <div className="game-touch-controls snake-touch-controls"><button aria-label={locale === 'pl' ? 'W górę' : 'Up'} onPointerDown={() => holdDirection(0, -1)}>↑</button><div><button aria-label={locale === 'pl' ? 'W lewo' : 'Left'} onPointerDown={() => holdDirection(-1, 0)}>←</button><span>{copy.touch}</span><button aria-label={locale === 'pl' ? 'W prawo' : 'Right'} onPointerDown={() => holdDirection(1, 0)}>→</button></div><button aria-label={locale === 'pl' ? 'W dół' : 'Down'} onPointerDown={() => holdDirection(0, 1)}>↓</button><button className="snake-boost-button" onPointerDown={() => { boostRef.current = true }} onPointerUp={() => { boostRef.current = false }} onPointerCancel={() => { boostRef.current = false }} onPointerLeave={() => { boostRef.current = false }} aria-label={copy.dash}>⚡</button></div>
-        <p className="arcade-controls-note"><span>{copy.controls}</span> <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <span>· {copy.dash} <kbd>SPACE</kbd></span></p>
+        <TouchControls locale={locale} enabled={status==='playing'} groups={[{label:copy.controls,buttons:[['←','left'],['↑','up'],['↓','down'],['→','right'],[locale==='pl'?'Boost':'Boost','boost']]}]} onCancel={()=>setStatus('paused')} onKey={(key,pressed)=>{if(key==='boost')boostRef.current=pressed;else if(pressed){if(key==='left')holdDirection(-1,0);if(key==='right')holdDirection(1,0);if(key==='up')holdDirection(0,-1);if(key==='down')holdDirection(0,1)}}} />
       </div>
 
     </div>

@@ -53,3 +53,19 @@ Before adding a game, check:
 8. Can another stage, opponent, or boost be added inside the game module?
 9. Have later stages and repeated restarts been exercised, including persistent progress and held inputs?
 
+## Expanded arcade catalog
+
+- **Asteroid Drift** links five sector profiles with ship upgrades, splitting rocks, saucers, dash fuel, and recharging shields. Offer direct steering and classic inertia. Persist the active sector and ship build.
+- **Maze Chase** changes connected district layouts and enemy pursuit behavior. Buffered turns, mid-edge reversals, power orbs, fruit, and earned dashes give players several escape tools.
+- **Block Cascade** combines seven-bag pieces, hold, previews, ghost placement, wall kicks, bounded lock resets, combo scoring, and earned board rescues. Gravity rises to a bounded limit. Preserve the board, active piece, queue, hold eligibility, and current goals.
+- **River Crossing** links sets of five distinct homes into a journey. Later banks add turtle warnings, submerging platforms, faster currents, and route choices. Earn rewinds at safe banks.
+- **Blast Arena** uses destructible layouts, forecast-aware bots, chain explosions, and range/capacity/speed pickups. Solo stages link through upgrades; local two-player play forms a first-to-three series. Keep explosion propagation consistent when several crates break together.
+- **Bubble Tower** combines four authored platform rooms and their mirrored versions with walkers, hoppers, fliers, capture chains, escaping bubbles, and optional air currents. Cooperative players share lives and progression.
+- **Barrel Ascent** changes ladder routes, barrel drop behavior, required bolts, and moving lifts. Hammers create a temporary aggressive route through hazards. Persist collected objectives.
+- **Formation Rescue** combines diving formations, telegraphed tractor beams, recoverable captured pilots, dual fire, and non-combat flight challenges every fourth wave. Upgrade fire cadence or evasive rolls between waves.
+- **Coastal Rush** starts with visible traffic and links timed checkpoint gates into touring legs. Holding Space while cornering charges a drift; releasing banks points and nitro. Slipstream behind traffic, chain close passes up to ×5, and spend nitro to beat gates. Choose palm roads, tighter mountain passes, or dense night traffic. Save position, speed, traffic, body condition, and the current gate so resuming does not restart a deadline from a standstill.
+- **Iron Front** changes platform terrain across missions, introduces rapid/spread weapons and rescuable supply engineers, and puts the player in a rover every third mission. Enemy warnings, directional aim, crouching, arcing grenades, and siege attack phases provide tactical options. Save mission checkpoints, defeated enemies, boss damage, and collected supplies.
+
+## Visual clarity
+
+Give each game recognizable scenery and detailed silhouettes appropriate to its viewpoint. Use depth, material highlights, contact shadows, animation, and restrained effects to explain movement and impacts. Keep hazards and collision boundaries legible. Background detail must remain quieter than active objects; do not draw decorative barriers that imply nonexistent collisions. Keep important effects readable with reduced motion enabled. Avoid stretching a low-resolution canvas or loading remote assets during play.

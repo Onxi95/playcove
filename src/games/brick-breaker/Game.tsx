@@ -1,3 +1,5 @@
+import { TouchControls } from '../kit/TouchControls.tsx'
+import { bevel, orb, shadow } from '../kit/art.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
@@ -97,19 +99,18 @@ function clearBoost(scene: Scene) {
 
 function renderScene(context: CanvasRenderingContext2D, scene: Scene, boostLabels: Record<BoostType, string>, streakLabel: string) {
   context.clearRect(0, 0, WIDTH, HEIGHT)
-  context.fillStyle = '#f6f4e9'
-  context.fillRect(0, 0, WIDTH, HEIGHT)
-  context.fillStyle = '#e8e5d9'
-  context.fillRect(30, 28, WIDTH - 60, HEIGHT - 48)
-  context.fillStyle = '#a7aa92'
-  context.fillRect(30, 28, WIDTH - 60, 2)
-
+  const field=context.createLinearGradient(0,0,WIDTH,HEIGHT);field.addColorStop(0,'#132e39');field.addColorStop(.5,'#1c4043');field.addColorStop(1,'#102630');context.fillStyle=field;context.fillRect(0,0,WIDTH,HEIGHT);
+  context.strokeStyle='#b5d5bd12';context.lineWidth=1;for(let x=40;x<WIDTH;x+=40){context.beginPath();context.moveTo(x,30);context.lineTo(x,HEIGHT-24);context.stroke()}for(let y=30;y<HEIGHT;y+=40){context.beginPath();context.moveTo(30,y);context.lineTo(WIDTH-30,y);context.stroke()}
+  for(const x of[18,WIDTH-23]){bevel(context,x,22,5,HEIGHT-40,'#89b8ae',2);for(let y=35;y<HEIGHT-30;y+=20){context.fillStyle='#d4ce9655';context.fillRect(x+1,y,3,8)}}
+  context.strokeStyle='#a8cfc522';context.strokeRect(29,26,WIDTH-58,HEIGHT-48);
   for (const brick of scene.bricks) {
     if (!brick.alive) continue
+    shadow(context,brick.x+BRICK_WIDTH/2,brick.y+BRICK_HEIGHT+2,BRICK_WIDTH*.45,3);
     context.fillStyle = brick.hits > 1 ? '#545b65' : brick.color
     context.beginPath()
     context.roundRect(brick.x, brick.y, BRICK_WIDTH, BRICK_HEIGHT, 5)
     context.fill()
+    bevel(context,brick.x,brick.y,BRICK_WIDTH,BRICK_HEIGHT,brick.hits>1?'#84969a':brick.color,5)
     context.fillStyle = 'rgba(255,255,255,.26)'
     context.fillRect(brick.x + 7, brick.y + 4, BRICK_WIDTH - 14, 2)
     if (brick.hits > 1) {
@@ -157,10 +158,13 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, boostLabel
   context.beginPath()
   context.roundRect(scene.paddleX, HEIGHT - 39, scene.paddleWidth, PADDLE_HEIGHT, 7)
   context.fill()
+  bevel(context,scene.paddleX,HEIGHT-39,scene.paddleWidth,PADDLE_HEIGHT,scene.paddleFlash>0?'#f4c39a':'#abc7c5',7)
+  orb(context,scene.ballX,scene.ballY,8,scene.boost==='fire'?'#ffbc69':'#f0d99e')
   context.fillStyle = scene.boost === 'fire' ? '#ffc64c' : '#ef745b'
   context.beginPath()
   context.arc(scene.ballX, scene.ballY, 8, 0, Math.PI * 2)
   context.fill()
+  orb(context,scene.ballX,scene.ballY,8,scene.boost==='fire'?'#ffbc69':'#f0d99e')
   context.fillStyle = 'rgba(239,116,91,.18)'
   context.beginPath()
   context.arc(scene.ballX, scene.ballY, 15, 0, Math.PI * 2)
@@ -569,13 +573,7 @@ export function Game({ locale }: GameProps) {
           </GamePanel>
           <GameOverlay gameName="BRICK BREAKER" onRestart={startGame} status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (locale === 'pl' ? 'Trafienie krawędzią pałki otwiera drogę za cegły.' : 'An edge return opens a route behind the bricks.') : copy.goal} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : startGame} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.wave, value: wave }, { label: locale === 'pl' ? 'POPRZEDNI REKORD' : 'PREVIOUS BEST', value: runBest }] }} />
         </div>
-        <div className="game-touch-controls">
-          <button aria-label={copy.left} onPointerDown={() => hold('left', true)} onPointerUp={() => hold('left', false)} onPointerCancel={() => hold('left', false)} onPointerLeave={() => hold('left', false)}>←</button>
-          <span>{copy.move}</span>
-          <button disabled={status !== 'playing' || laserFuel < 100} aria-label={locale === 'pl' ? 'Aktywuj laser' : 'Activate laser'} onPointerDown={() => { keysRef.current.fire = true }}>⚡</button>
-          <button aria-label={copy.right} onPointerDown={() => hold('right', true)} onPointerUp={() => hold('right', false)} onPointerCancel={() => hold('right', false)} onPointerLeave={() => hold('right', false)}>→</button>
-        </div>
-        <p className="game-boost-note">{copy.boostHelp}</p>
+        <TouchControls locale={locale} enabled={status==='playing'} groups={[{label:locale==='pl'?'Przesuń palcem po planszy lub użyj przycisków':'Drag on the field or use the buttons',buttons:[['←','left'],[locale==='pl'?'Laser':'Laser','fire'],['→','right']]}]} onCancel={()=>setStatus('paused')} onKey={(key,pressed)=>{if(key==='left'||key==='right')hold(key,pressed);if(key==='fire'&&pressed)keysRef.current.fire=true}} />
       </div>
 
     </div>

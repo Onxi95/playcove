@@ -1,3 +1,6 @@
+import { TouchControls } from '../kit/TouchControls.tsx'
+import type { TouchGroup } from '../kit/TouchControls.tsx'
+import { polygon, shadow, orb } from '../kit/art.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
@@ -114,6 +117,9 @@ function drawPlayer(context: CanvasRenderingContext2D, player: Player, ball: Bal
   context.roundRect(x - 15, y + 25, 30, 30, 9)
   context.fill()
 
+  context.fillStyle='#fff2d7bb';context.fillRect(x-2,y+31,4,11);context.fillRect(x-5,y+32,10,2);
+  context.strokeStyle='#fff0d088';context.lineWidth=2;context.beginPath();context.moveTo(x-12,y+30);context.lineTo(x-6,y+27);context.lineTo(x,y+31);context.lineTo(x+6,y+27);context.lineTo(x+12,y+30);context.stroke();
+  shadow(context,x,GROUND+2,20,4,'#12372b33');
   if (player.aim !== 'drive' || hasBallInRange) {
     const startX = hasBallInRange ? player.x + player.facing * (PLAYER_WIDTH / 2 + BALL_RADIUS + 2) : footX
     const startY = hasBallInRange ? ball.y : footY
@@ -181,8 +187,9 @@ function drawScene(context: CanvasRenderingContext2D, match: Match, level: Level
   const arena = arenas[level]
   const wind = windAt(match.elapsed * 1000, level)
   context.clearRect(0, 0, WIDTH, HEIGHT)
-  context.fillStyle = arena.sky
-  context.fillRect(0, 0, WIDTH, GROUND)
+  const sky=context.createLinearGradient(0,0,0,GROUND);sky.addColorStop(0,arena.sky);sky.addColorStop(1,level==='rooftop'?'#80758d':'#d2ded0');context.fillStyle=sky;context.fillRect(0,0,WIDTH,GROUND);
+  for(let layer=0;layer<2;layer++){const points=[0,GROUND];for(let x=0;x<=WIDTH+30;x+=30)points.push(x,GROUND-100+layer*30-Math.sin(x/140+layer)*27);points.push(WIDTH+30,GROUND);polygon(context,points,level==='rooftop'?(layer?'#566178':'#6b758a'):(layer?'#8aa99d':'#a1bbb1'))}
+
 
   if (level === 'rooftop') {
     context.fillStyle = 'rgba(31,42,68,.3)'
@@ -209,6 +216,10 @@ function drawScene(context: CanvasRenderingContext2D, match: Match, level: Level
   context.arc(level === 'rooftop' ? 758 : 110, level === 'rooftop' ? 80 : 73, 27, 0, Math.PI * 2)
   context.fill()
 
+  if(level!=='rooftop'){
+    for(let tier=0;tier<3;tier++){const y=GROUND-78+tier*21;context.fillStyle=tier%2?'#526f7333':'#36545f33';context.fillRect(0,y,WIDTH,20);for(let i=0;i<75;i++){const x=i*13+3;context.fillStyle=['#dbc59b','#8ea9b5','#c29589','#a0b7a2'][(i+tier*3)%4];context.beginPath();context.arc(x,y+9,2.5,0,Math.PI*2);context.fill();context.fillStyle='#40586755';context.fillRect(x-3,y+12,6,6)}}
+    context.fillStyle='#45665f';context.fillRect(0,GROUND-18,WIDTH,18);for(let i=0;i<10;i++){context.fillStyle=i%2?'#d8d4b4':'#6f9391';context.fillRect(i*100+8,GROUND-14,84,9)}
+  }
   context.fillStyle = arena.ground
   context.fillRect(0, GROUND, WIDTH, HEIGHT - GROUND)
   for (let stripe = 0; stripe < 9; stripe += 1) {
@@ -229,6 +240,7 @@ function drawScene(context: CanvasRenderingContext2D, match: Match, level: Level
   context.arc(WIDTH / 2, GROUND + 2, 64, 0, Math.PI)
   context.stroke()
 
+  for(let i=0;i<90;i++){const x=(i*139)%WIDTH;context.strokeStyle='#e5e3bc22';context.lineWidth=1;context.beginPath();context.moveTo(x,GROUND+2);context.lineTo(x+2,GROUND+6+(i%4));context.stroke()}
   drawGoal(context, 'left')
   drawGoal(context, 'right')
 
@@ -273,6 +285,8 @@ function drawScene(context: CanvasRenderingContext2D, match: Match, level: Level
   context.beginPath()
   context.arc(match.ball.x, match.ball.y, BALL_RADIUS, 0, Math.PI * 2)
   context.fill()
+  orb(context,match.ball.x,match.ball.y,BALL_RADIUS,'#e9e9d5','#fffdf0');
+  context.save();context.translate(match.ball.x,match.ball.y);context.rotate(match.elapsed*match.ball.vx*.003);const patches:number[]=[];for(let i=0;i<5;i++){const angle=-Math.PI/2+i*Math.PI*2/5;patches.push(Math.cos(angle)*4.3,Math.sin(angle)*4.3)}polygon(context,patches,'#344c55');context.restore();
   if (match.ball.kickFlash > 0) {
     context.strokeStyle = `rgba(255,255,255,${Math.min(1, match.ball.kickFlash * 7)})`
     context.lineWidth = 3
@@ -879,26 +893,10 @@ export function Game({ locale }: GameProps) {
         </div>
         <p className="soccer-aim-hint soccer-aim-hint-keyboard">{mode === 'local' ? copy.aimHintLocal : copy.aimHintBot}</p>
         <p className="soccer-aim-hint soccer-aim-hint-touch">{mode === 'local' ? copy.touchAimHintLocal : copy.touchAimHintBot}</p>
-        <div className="soccer-touch-controls">
-          <div className="soccer-touch-player">
-            <span>{copy.p1Controls}</span>
-            <button aria-label={locale === 'pl' ? 'Gracz 1 w lewo' : 'Player 1 left'} onPointerDown={() => hold('p1Left', true)} onPointerUp={() => hold('p1Left', false)} onPointerCancel={() => hold('p1Left', false)} onPointerLeave={() => hold('p1Left', false)}>←</button>
-            <button aria-label={locale === 'pl' ? 'Gracz 1 w prawo' : 'Player 1 right'} onPointerDown={() => hold('p1Right', true)} onPointerUp={() => hold('p1Right', false)} onPointerCancel={() => hold('p1Right', false)} onPointerLeave={() => hold('p1Right', false)}>→</button>
-            <button aria-label={locale === 'pl' ? 'Gracz 1 skok' : 'Player 1 jump'} onPointerDown={() => hold('p1Jump', true)}>↑</button>
-            <button aria-label={locale === 'pl' ? 'Celuj lobem' : 'Aim lob'} onPointerDown={() => hold('p1AimUp', true)} onPointerUp={() => hold('p1AimUp', false)} onPointerCancel={() => hold('p1AimUp', false)} onPointerLeave={() => hold('p1AimUp', false)}>⌒</button>
-            <button className="soccer-aim-button" title={copy.low} aria-label={locale === 'pl' ? 'Gracz 1 niski strzał' : 'Player 1 low shot aim'} onPointerDown={() => hold('p1AimDown', true)} onPointerUp={() => hold('p1AimDown', false)} onPointerCancel={() => hold('p1AimDown', false)} onPointerLeave={() => hold('p1AimDown', false)}>↓</button>
-            <button className="soccer-kick-button" aria-label={locale === 'pl' ? 'Gracz 1 strzał' : 'Player 1 kick'} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); hold('p1KickHeld', true) }} onPointerUp={() => { hold('p1KickHeld', false); hold('p1Kick', true) }} onPointerCancel={() => hold('p1KickHeld', false)}>{copy.kick}</button>
-          </div>
-          {mode === 'local' && <div className="soccer-touch-player">
-            <span>{copy.p2Controls}</span>
-            <button aria-label={locale === 'pl' ? 'Gracz 2 w lewo' : 'Player 2 left'} onPointerDown={() => hold('p2Left', true)} onPointerUp={() => hold('p2Left', false)} onPointerCancel={() => hold('p2Left', false)} onPointerLeave={() => hold('p2Left', false)}>←</button>
-            <button aria-label={locale === 'pl' ? 'Gracz 2 w prawo' : 'Player 2 right'} onPointerDown={() => hold('p2Right', true)} onPointerUp={() => hold('p2Right', false)} onPointerCancel={() => hold('p2Right', false)} onPointerLeave={() => hold('p2Right', false)}>→</button>
-            <button aria-label={locale === 'pl' ? 'Gracz 2 skok' : 'Player 2 jump'} onPointerDown={() => hold('p2Jump', true)}>↑</button>
-            <button aria-label={locale === 'pl' ? 'Celuj lobem' : 'Aim lob'} onPointerDown={() => hold('p2AimUp', true)} onPointerUp={() => hold('p2AimUp', false)} onPointerCancel={() => hold('p2AimUp', false)} onPointerLeave={() => hold('p2AimUp', false)}>⌒</button>
-            <button className="soccer-aim-button" title={copy.low} aria-label={locale === 'pl' ? 'Gracz 2 niski strzał' : 'Player 2 low shot aim'} onPointerDown={() => hold('p2AimDown', true)} onPointerUp={() => hold('p2AimDown', false)} onPointerCancel={() => hold('p2AimDown', false)} onPointerLeave={() => hold('p2AimDown', false)}>↓</button>
-            <button className="soccer-kick-button" aria-label={locale === 'pl' ? 'Gracz 2 strzał' : 'Player 2 kick'} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); hold('p2KickHeld', true) }} onPointerUp={() => { hold('p2KickHeld', false); hold('p2Kick', true) }} onPointerCancel={() => hold('p2KickHeld', false)}>{copy.kick}</button>
-          </div>}
-        </div>
+        <TouchControls locale={locale} enabled={status==='playing'} groups={(()=>{const groups:TouchGroup[]=[{label:copy.p1Controls,buttons:[['←','p1Left'],['→','p1Right'],['↑','p1Jump'],['⌒','p1AimUp'],['↓','p1AimDown'],[copy.kick,'p1Kick']]}];if(mode==='local')groups.push({label:copy.p2Controls,buttons:[['←','p2Left'],['→','p2Right'],['↑','p2Jump'],['⌒','p2AimUp'],['↓','p2AimDown'],[copy.kick,'p2Kick']]});return groups})()} onCancel={()=>setStatus('paused')} onKey={(key,pressed)=>{
+          if(key==='p1Left')hold('p1Left',pressed);if(key==='p1Right')hold('p1Right',pressed);if(key==='p1Jump'&&pressed)hold('p1Jump',true);if(key==='p1AimUp')hold('p1AimUp',pressed);if(key==='p1AimDown')hold('p1AimDown',pressed);if(key==='p1Kick'){hold('p1KickHeld',pressed);if(!pressed)hold('p1Kick',true)}
+          if(key==='p2Left')hold('p2Left',pressed);if(key==='p2Right')hold('p2Right',pressed);if(key==='p2Jump'&&pressed)hold('p2Jump',true);if(key==='p2AimUp')hold('p2AimUp',pressed);if(key==='p2AimDown')hold('p2AimDown',pressed);if(key==='p2Kick'){hold('p2KickHeld',pressed);if(!pressed)hold('p2Kick',true)}
+        }} />
       </div>
 
 

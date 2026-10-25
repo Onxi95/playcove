@@ -36,7 +36,7 @@ export async function loadGame(game, locale = 'en', stored = {}, display = { wid
       removeEventListener(name, callback) { listeners.get(`${target}:${name}`)?.delete(callback) },
     }
   }
-  const context2d = new Proxy({}, {
+  const context2d = new Proxy(display.context ?? {}, {
     get(target, key) {
       if (key in target) return target[key]
       if (String(key).startsWith('create')) return () => ({ addColorStop() {} })
@@ -136,7 +136,7 @@ export async function loadGame(game, locale = 'en', stored = {}, display = { wid
     storage, overlay, find, drawnText, canvas,
     resize(width, ratio) { display.width = width; display.ratio = ratio; emit('window', 'resize') },
     scene() {
-      return slots.find((slot) => slot.kind === 'ref' && slot.value.current && ['snake', 'ballX', 'players', 'obstacles', 'enemies'].some((key) => key in slot.value.current))?.value.current
+      return slots.find((slot) => slot.kind === 'ref' && slot.value.current && ['snake', 'ballX', 'players', 'obstacles', 'enemies', 'world', 'board', 'walls', 'homes', 'actors', 'barrels', 'traffic', 'tanks', 'cars'].some((key) => key in slot.value.current))?.value.current
     },
     act(callback) { callback(); flush() },
     start() { overlay().onAction(); flush() },

@@ -1,3 +1,5 @@
+import { TouchControls } from '../kit/TouchControls.tsx'
+import { polygon } from '../kit/art.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { GameProps } from '../contract.ts'
 import { useGameSession } from '../kit/use-game-session.ts'
@@ -58,6 +60,7 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   sky.addColorStop(1, '#f9d79a')
   context.fillStyle = sky
   context.fillRect(0, 0, WIDTH, GROUND)
+  for(let layer=0;layer<2;layer++){const points=[0,GROUND];for(let x=0;x<=WIDTH+25;x+=25)points.push(x,GROUND-90-layer*55-Math.sin((x+scene.distance*(layer+1)*.5)/130)*24);points.push(WIDTH+25,GROUND);polygon(context,points,layer?'#ce8c86':'#e3a397')}
   context.fillStyle = 'rgba(255,246,207,.8)'
   context.beginPath()
   context.arc(664, 76, 36, 0, Math.PI * 2)
@@ -69,6 +72,8 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
     const x = ((index * 97 - phase * 80) % (WIDTH + 100) + WIDTH + 100) % (WIDTH + 100) - 50
     context.fillStyle = index % 2 ? '#b56f74' : '#9a6279'
     context.fillRect(x, GROUND - height, width, height)
+    context.fillStyle='#e5b59a55';context.fillRect(x,GROUND-height,width,3);context.fillStyle='#67536e44';context.fillRect(x+width-7,GROUND-height+3,7,height-3);
+    if(index%3===0){context.fillStyle='#755a6d';context.fillRect(x+9,GROUND-height-13,20,13);context.fillRect(x+12,GROUND-height-17,14,4)}
     context.fillStyle = 'rgba(255,226,163,.46)'
     for (let windowY = GROUND - height + 13; windowY < GROUND - 8; windowY += 18) context.fillRect(x + 8, windowY, 5, 7)
   }
@@ -77,6 +82,7 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   context.fillRect(0, GROUND, WIDTH, HEIGHT - GROUND)
   context.fillStyle = '#f8d36f'
   context.fillRect(0, GROUND, WIDTH, 4)
+  for(let brickRow=0;brickRow<3;brickRow++){const offset=-(scene.distance*20)%65;for(let x=-65+offset+(brickRow%2)*32;x<WIDTH;x+=65){context.strokeStyle='#8ea2a31c';context.lineWidth=1;context.strokeRect(x,GROUND+9+brickRow*19,62,17)}}
   const stripeOffset = -(scene.distance * 20) % 76
   context.fillStyle = 'rgba(255,255,255,.68)'
   for (let x = -76 + stripeOffset; x < WIDTH; x += 76) context.fillRect(x, GROUND + 42, 42, 4)
@@ -90,6 +96,8 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
     context.beginPath()
     context.ellipse(coin.x, coin.y, 9 * pulse, 12 / pulse, 0, 0, Math.PI * 2)
     context.fill()
+    context.strokeStyle='#b58b45';context.lineWidth=1;context.beginPath();context.ellipse(coin.x,coin.y,5*pulse,8/pulse,0,0,Math.PI*2);context.stroke();
+    context.fillStyle='#fff4b9';context.fillRect(coin.x-1,coin.y-5,2,10);
     context.restore()
   }
 
@@ -170,6 +178,10 @@ function renderScene(context: CanvasRenderingContext2D, scene: Scene, time: numb
   context.beginPath()
   context.roundRect(PLAYER_X - PLAYER_WIDTH / 2, playerY + run, PLAYER_WIDTH, height, 10)
   context.fill()
+  context.fillStyle='#df9a7a';context.beginPath();context.roundRect(PLAYER_X-PLAYER_WIDTH/2+3,playerY+height*.42+run,PLAYER_WIDTH-6,height*.38,5);context.fill();
+  context.fillStyle='#36516b';context.beginPath();context.roundRect(PLAYER_X-PLAYER_WIDTH/2,playerY+4+run,PLAYER_WIDTH,Math.max(8,height*.22),5);context.fill();
+  context.fillStyle='#c6e0db';context.fillRect(PLAYER_X+2,playerY+7+run,10,3);
+  context.fillStyle='#eec394';context.fillRect(PLAYER_X-PLAYER_WIDTH/2-8,playerY+height*.48+run,12,5);
   context.fillStyle = '#e87957'
   context.beginPath()
   context.arc(PLAYER_X + 5, playerY + 11 + run, 3, 0, Math.PI * 2)
@@ -482,8 +494,7 @@ export function Game({ locale }: GameProps) {
           </GamePanel>
           <GameOverlay gameName="ROOFTOP RUNNER" onRestart={start} status={status} locale={locale} title={status === 'over' ? copy.over : status === 'paused' ? copy.paused : copy.ready} description={status === 'over' ? (sceneRef.current.death === 'gap' ? locale === 'pl' ? 'Upadek między dachami. Przytrzymaj skok albo użyj dopalacza nad luką.' : 'Fell between rooftops. Hold your jump, or boost across the gap.' : sceneRef.current.death === 'stack' ? locale === 'pl' ? 'Wysoka skrzynia. Przytrzymaj skok; krótki podskok jej nie minie.' : 'A tall stack. Hold your jump; a short hop will not clear it.' : sceneRef.current.death === 'sign' ? locale === 'pl' ? 'Znak zablokował drogę. Przytrzymaj dół, by prześlizgnąć się pod nim.' : 'Caught by a sign. Hold Down to slide beneath it.' : locale === 'pl' ? 'Potknięcie o skrzynię. Skocz przed śladem monet lub przebij się dopalaczem.' : 'Clipped a crate. Jump into the coin trail or boost through it.') : copy.readyText} actionLabel={status === 'paused' ? copy.resume : status === 'over' ? copy.again : copy.start} onAction={status === 'paused' ? () => setStatus('playing') : start} result={{ value: score, label: copy.score, score, best: runBest, saved, stats: [{ label: copy.coins, value: coins }, { label: locale === 'pl' ? 'DYSTANS' : 'DISTANCE', value: `${Math.floor(sceneRef.current.distance)}m` }, { label: locale === 'pl' ? 'PRZESZKODY' : 'CLEARED', value: sceneRef.current.cleared }] }} />
         </div>
-        <div className="game-touch-controls runner-touch-controls"><button onPointerDown={() => { inputRef.current.jump = true; inputRef.current.jumpHeld = true }} onPointerUp={() => { inputRef.current.jumpHeld = false }} onPointerCancel={() => { inputRef.current.jumpHeld = false }} onPointerLeave={() => { inputRef.current.jumpHeld = false }} aria-label={copy.jump}>↑ {copy.jump}</button><button onPointerDown={() => { inputRef.current.slide = true }} onPointerUp={() => { inputRef.current.slide = false }} onPointerCancel={() => { inputRef.current.slide = false }} onPointerLeave={() => { inputRef.current.slide = false }} aria-label={copy.slide}>↓ {copy.slide}</button><button disabled={status !== 'playing' || dashFuel < 65} onPointerDown={() => { inputRef.current.dash = true }} aria-label={copy.dash}>⚡ {copy.dash}</button></div>
-        <p className="arcade-controls-note"><span>{copy.jump} <kbd>SPACE</kbd> <kbd>↑</kbd> <kbd>W</kbd></span><span>{copy.slide} <kbd>↓</kbd> <kbd>S</kbd></span><span>{copy.dash} <kbd>SHIFT</kbd> <kbd>X</kbd></span></p>
+        <TouchControls locale={locale} enabled={status==='playing'} groups={[{label:'',buttons:[['↑ '+copy.jump,'jump'],['↓ '+copy.slide,'slide'],['✦ '+copy.dash,'dash']]}]} onCancel={()=>setStatus('paused')} onKey={(key,pressed)=>{if(key==='jump'){inputRef.current.jumpHeld=pressed;if(pressed)inputRef.current.jump=true}if(key==='slide')inputRef.current.slide=pressed;if(key==='dash'&&pressed)inputRef.current.dash=true}} />
       </div>
 
     </div>
