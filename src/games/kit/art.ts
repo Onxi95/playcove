@@ -155,6 +155,7 @@ export function worker(
   time: number,
   moving: boolean,
   helmet = true,
+  armsUp = false,
 ) {
   const stride = moving ? Math.sin(time * 16) * 6 : 0
   shadow(ctx, x, y + 35, 15, 4)
@@ -173,10 +174,20 @@ export function worker(
   ctx.lineWidth = 5
   ctx.beginPath()
   ctx.moveTo(x - 10, y + 13)
-  ctx.lineTo(x - 13 + stride * 0.5, y + 23)
+  ctx.lineTo(
+    armsUp ? x + face * 20 - 4 : x - 13 + stride * 0.5,
+    armsUp ? y - 9 : y + 23,
+  )
   ctx.moveTo(x + 10, y + 13)
-  ctx.lineTo(x + 13 - stride * 0.5, y + 23)
+  ctx.lineTo(
+    armsUp ? x + face * 20 + 4 : x + 13 - stride * 0.5,
+    armsUp ? y - 9 : y + 23,
+  )
   ctx.stroke()
+  if (armsUp) {
+    circle(ctx, x + face * 20 - 4, y - 10, 3, '#edcda2')
+    circle(ctx, x + face * 20 + 4, y - 10, 3, '#edcda2')
+  }
   circle(ctx, x, y + 3, 10, '#d7b58e')
   if (helmet) {
     rect(ctx, x - 12, y - 6, 24, 7, color, 3)

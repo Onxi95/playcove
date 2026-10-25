@@ -47,7 +47,7 @@ Design for 15–30 minute sessions with responsive controls, varied challenges, 
 - Formation Rescue — diving formations, captured pilots, dual fire, challenge waves
 - Coastal Rush — drifting, slipstream, overtake chains, scenic route forks
 - Iron Front — run-and-gun missions, weapon supplies, grenades, siege bosses, rovers
-- Volley Clash — solo or local volleyball with changing courts and a three-set match
+- Volley Clash — solo or local volleyball with receives, spikes, timed blocks, and a first-to-three-set match
 - Tank Tactics — solo or pass-and-play artillery expedition with deformable terrain
 - Ricochet Rivals — solo or local arena tournament with charged throws and parries
 - Circuit Clash — solo or local five-lap races across five circuits and a seven-win tour

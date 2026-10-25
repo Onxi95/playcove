@@ -26,6 +26,9 @@ export type Player = {
   dash: number
   energy: number
   buffer: number
+  block: number
+  blockCooldown: number
+  blockFlash: number
 }
 export type State = ArcadeState & {
   players: Player[]
@@ -38,6 +41,9 @@ export type State = ArcadeState & {
     last: number
     contact: number
   }
+  touches: number[]
+  blocks: number
+  blockSpot: { x: number; y: number; player: number; life: number } | null
   points: number[]
   wins: number[]
   serve: number
@@ -47,7 +53,7 @@ export type State = ArcadeState & {
   bestRally: number
   lastWinner: number
   pointFlash: number
-  pointCall: 'in' | 'out' | ''
+  pointCall: 'in' | 'out' | 'touches' | ''
   landing: number
   fault: number
   mode: OpponentMode
@@ -66,6 +72,9 @@ function player(x: number): Player {
     dash: 0,
     energy: 100,
     buffer: 0,
+    block: 0,
+    blockCooldown: 0,
+    blockFlash: 0,
   }
 }
 export function create(p?: Progress): State {
@@ -73,6 +82,9 @@ export function create(p?: Progress): State {
     ...base(p),
     players: [player(230), player(770)],
     ball: { x: 230, y: 350, vx: 0, vy: 0, spin: 0, last: 0, contact: 0 },
+    touches: [0, 0],
+    blocks: numberCarry(p, 'blocks', 0),
+    blockSpot: null,
     points: [
       numberCarry(p, 'p1', 0, 0, 1000),
       numberCarry(p, 'p2', 0, 0, 1000),
@@ -98,12 +110,12 @@ export function create(p?: Progress): State {
 export function award(
   s: State,
   winner: number,
-  call: 'in' | 'out' = 'in',
+  call: 'in' | 'out' | 'touches' = 'in',
   landing = s.ball.x,
 ) {
   s.pointCall = call
   s.landing = clamp(landing, 0, WIDTH)
-  s.fault = call === 'out' ? s.ball.last : -1
+  s.fault = call === 'in' ? -1 : s.ball.last
   s.points[winner]++
   s.score += 100 + Math.min(1000, s.rally * 20)
   s.lastWinner = winner
@@ -112,6 +124,8 @@ export function award(
   s.events.push('point')
   s.bestRally = Math.max(s.bestRally, s.rally)
   s.rally = 0
+  s.touches = [0, 0]
+  s.blockSpot = null
   if (
     s.points[winner] >= 11 &&
     (s.points[winner] - s.points[1 - winner] >= 2 || s.points[winner] >= 17)
@@ -152,6 +166,10 @@ export function update(s: State, input: ArcadeInput, seconds: number) {
 function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
   s.elapsed += dt
   s.pointFlash = Math.max(0, s.pointFlash - dt)
+  if (s.blockSpot) {
+    s.blockSpot.life -= dt
+    if (s.blockSpot.life <= 0) s.blockSpot = null
+  }
   const court = COURTS[s.court]
   for (let index = 0; index < 2; index++) {
     const p = s.players[index],
@@ -159,6 +177,9 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
       left = down(input, index ? 'arrowleft' : 'a'),
       strike = down(input, index ? 'enter' : ' '),
       dx = Number(right) - Number(left)
+    p.block = Math.max(0, p.block - dt)
+    p.blockCooldown = Math.max(0, p.blockCooldown - dt)
+    p.blockFlash = Math.max(0, p.blockFlash - dt)
     p.hit = Math.max(0, p.hit - dt)
     p.dash = Math.max(0, p.dash - dt)
     p.energy = Math.min(100, p.energy + dt * 23)
@@ -166,6 +187,25 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
       first && pressed(input, index ? 'arrowup' : 'w')
         ? 0.14
         : Math.max(0, p.buffer - dt)
+    if (
+      first &&
+      pressed(input, index ? 'l' : 'e') &&
+      p.blockCooldown === 0 &&
+      p.energy >= 25 &&
+      Math.abs(p.x - 500) <= 72
+    ) {
+      p.energy -= 25
+      p.block = 0.46
+      p.blockCooldown = 0.95
+      p.charge = 0
+      p.hit = 0
+      if (p.ground) {
+        p.vy = -555
+        p.ground = false
+        p.buffer = 0
+      }
+      s.events.push('hit')
+    }
     if (first && pressed(input, index ? 'shift' : 'q') && p.energy >= 65) {
       p.dash = 0.2
       p.energy -= 65
@@ -188,7 +228,10 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
       p.vy = 0
       p.ground = true
     }
-    if (strike) p.charge = Math.min(1, p.charge + dt * 2.2)
+    if (p.block > 0) {
+      p.charge = 0
+      p.hit = 0
+    } else if (strike) p.charge = Math.min(1, p.charge + dt * 2.2)
     else if (p.charge > 0) {
       p.hit = 0.24
       p.charge = 0
@@ -224,6 +267,7 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
     b.y = 20
     b.vy = Math.abs(b.vy) * 0.75
   }
+  if (tryBlock(s, input)) return
   if (b.y > NET - 15 && Math.abs(b.x - 500) < 22) {
     if (previousY <= NET - 15 && b.vy > 0) {
       b.y = NET - 15
@@ -246,7 +290,14 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
       dy = b.y - (p.y + 20),
       distance = Math.hypot(dx, dy),
       attacking = down(input, index ? 'enter' : ' ') || p.hit > 0
-    if (distance < 48 && b.contact === 0) {
+    if (distance < 48 && b.contact === 0 && p.block === 0) {
+      if (b.last !== index) s.touches[index] = 0
+      s.touches[index]++
+      s.touches[1 - index] = 0
+      if (s.touches[index] > 3) {
+        award(s, 1 - index, 'touches', b.x)
+        return
+      }
       const toward = index ? -1 : 1,
         low = down(input, index ? 'arrowdown' : 's'),
         forward =
@@ -254,14 +305,10 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
           Number(down(input, index ? 'arrowleft' : 'a'))
       b.x = p.x + (dx / Math.max(1, distance)) * 49
       b.y = p.y + 20 + (dy / Math.max(1, distance)) * 49
-      b.vx =
-        toward * (attacking ? 285 + 150 * p.charge : 170) +
-        p.vx * 0.36 +
-        forward * 65
-      b.vy =
-        attacking && !p.ground && low
-          ? -80
-          : -(attacking ? 590 : 510) + (low ? 95 : 0)
+      b.vx = attacking
+        ? toward * (285 + 150 * p.charge) + p.vx * 0.36 + forward * 65
+        : clamp(dx * 2 + p.vx * 0.25, -130, 130)
+      b.vy = attacking ? (!p.ground && low ? -80 : -590 + (low ? 95 : 0)) : -540
       b.spin = p.vx * 0.25
       b.last = index
       b.contact = 0.16
@@ -275,6 +322,51 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
   }
   b.vx = clamp(b.vx, -600, 600)
   b.vy = clamp(b.vy, -750, 900)
+}
+export function blockHands(p: Player, index: number) {
+  return { x: p.x + (index ? -1 : 1) * 30, y: p.y - 17 }
+}
+function tryBlock(s: State, input: ArcadeInput) {
+  const b = s.ball
+  if (b.contact > 0 || s.serve > 0 || b.y > NET + BALL_RADIUS) return false
+  for (let index = 0; index < 2; index++) {
+    const p = s.players[index],
+      toward = index ? -1 : 1,
+      hands = blockHands(p, index)
+    if (
+      p.block === 0 ||
+      p.ground ||
+      b.last === index ||
+      toward * b.vx >= -20 ||
+      Math.abs(p.x - 500) > 72 ||
+      Math.abs(b.x - hands.x) > BALL_RADIUS + 18 ||
+      Math.abs(b.y - hands.y) > BALL_RADIUS + 19
+    )
+      continue
+    const lean =
+        toward *
+        (Number(down(input, index ? 'arrowright' : 'd')) -
+          Number(down(input, index ? 'arrowleft' : 'a'))),
+      perfect = p.block > 0.3
+    s.blockSpot = { x: hands.x, y: hands.y, player: index, life: 0.55 }
+    b.x = index ? Math.min(hands.x - 33, 474) : Math.max(hands.x + 33, 526)
+    b.y = Math.min(b.y, NET - BALL_RADIUS - 4)
+    b.vx = toward * clamp(170 + Math.abs(b.vx) * 0.25 + lean * 60, 180, 390)
+    b.vy = lean < 0 ? -240 : perfect || lean > 0 ? 120 : -60
+    b.spin = -toward * 60
+    b.last = index
+    b.contact = 0.2
+    p.block = 0
+    p.blockFlash = 0.35
+    s.touches = [0, 0]
+    s.blocks++
+    s.rally++
+    s.bestRally = Math.max(s.bestRally, s.rally)
+    s.score += perfect ? 150 : 80
+    s.events.push('boost')
+    return true
+  }
+  return false
 }
 export function choose(s: State, id: string) {
   if (s.phase !== 'choice') return
@@ -291,6 +383,7 @@ export function choose(s: State, id: string) {
         w2: s.wins[1],
         court,
         bestRally: s.bestRally,
+        blocks: s.blocks,
         server: s.lastWinner,
         mode: s.mode,
       },
@@ -312,6 +405,7 @@ export function save(s: State): Progress {
       server: s.server,
       lastWinner: s.lastWinner,
       bestRally: s.bestRally,
+      blocks: s.blocks,
       mode: s.mode,
     },
   }
@@ -363,6 +457,15 @@ function computerInput(
   const leaveOut =
     b.last === 0 &&
     (landing + BALL_RADIUS < COURT_LEFT || landing - BALL_RADIUS > COURT_RIGHT)
+  const netPlay =
+    level > 0 &&
+    !leaveOut &&
+    b.last === 0 &&
+    b.vx > 130 &&
+    b.x > 280 &&
+    b.x < 570 &&
+    b.y < 410
+  if (netPlay) s.bot.target = 548
   if (leaveOut) s.bot.target = 700
   const held: string[] = [],
     tapped: string[] = []
@@ -396,6 +499,28 @@ function computerInput(
     s.bot.jump = 0.32
     tapped.push('arrowup')
   }
+  const crossing = (500 - b.x) / Math.max(1, b.vx)
+  if (
+    netPlay &&
+    Math.abs(p.x - 500) < 80 &&
+    p.ground &&
+    s.bot.jump === 0 &&
+    crossing > 0.1 &&
+    crossing < [0.3, 0.4, 0.5][level]
+  ) {
+    s.bot.jump = 0.32
+    tapped.push('arrowup')
+  }
+  if (
+    netPlay &&
+    !p.ground &&
+    p.y < 430 &&
+    Math.abs(p.x - 500) < 65 &&
+    p.blockCooldown === 0 &&
+    Math.abs(b.x - (p.x - 30)) < 160 &&
+    Math.abs(b.y - (p.y - 17)) < 85
+  )
+    tapped.push('l')
   if (s.bot.jump > 0) held.push('arrowup')
   if (
     level > 0 &&

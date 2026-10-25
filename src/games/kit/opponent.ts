@@ -63,6 +63,7 @@ export function botInput(
     'arrowdown',
     'enter',
     'shift',
+    'l',
   ])
   return {
     ...source,

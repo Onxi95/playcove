@@ -15,6 +15,7 @@ import {
   NET,
   COURT_LEFT,
   COURT_RIGHT,
+  blockHands,
 } from './engine.ts'
 import type { State } from './engine.ts'
 const definition: ArcadeDefinition<State> = {
@@ -40,6 +41,7 @@ const definition: ArcadeDefinition<State> = {
           ['→', 'd'],
           ['↑', 'w'],
           [l === 'pl' ? 'Atak' : 'Hit', ' '],
+          [l === 'pl' ? 'Blok' : 'Block', 'e'],
           [l === 'pl' ? 'Unik' : 'Dash', 'q'],
           ['↓', 's'],
         ],
@@ -51,6 +53,7 @@ const definition: ArcadeDefinition<State> = {
           ['→', 'arrowright'],
           ['↑', 'arrowup'],
           [l === 'pl' ? 'Atak' : 'Hit', 'enter'],
+          [l === 'pl' ? 'Blok' : 'Block', 'l'],
           [l === 'pl' ? 'Unik' : 'Dash', 'shift'],
           ['↓', 'arrowdown'],
         ],
@@ -61,8 +64,8 @@ const definition: ArcadeDefinition<State> = {
     pl: 'Dwie strony. Jeszcze jedna obrona.',
   },
   help: {
-    en: 'P1: A D move, W jump, Space power hit, Q dash. Local P2: ← → move, ↑ jump, Enter power hit, Shift dash. Shots landing outside the court lose a point for the last hitter. Hold a hit to charge; ↓ / S aims lower. First to 11, win by two; sudden point at 16–16. Win three sets across changing courts.',
-    pl: 'P1: A D ruch, W skok, spacja: mocne odbicie, Q unik. P2 lokalnie: ← → ruch, ↑ skok, Enter: mocne odbicie, Shift unik. Aut oznacza punkt dla rywala ostatniego odbijającego. Przytrzymaj odbicie, by naładować; ↓ / S celuje niżej. Do 11, przewaga dwóch; przy 16–16 decyduje kolejny punkt. Wygraj trzy sety.',
+    en: 'P1: A D move, W jump, Space power hit, Q dash, E block. Local P2: ← → move, ↑ jump, Enter power hit, Shift dash, L block. Receive, set, then attack within three touches. Block near the net; hold back to soften or toward the net to stuff. Blocks do not count as a touch. Shots landing outside the court lose a point for the last hitter. Hold a hit to charge; ↓ / S aims lower. First to 11, win by two; sudden point at 16–16. Win three sets across changing courts.',
+    pl: 'P1: A D ruch, W skok, spacja: mocne odbicie, Q unik, E blok. P2 lokalnie: ← → ruch, ↑ skok, Enter: mocne odbicie, Shift unik, L blok. Przyjmij, wystaw i zaatakuj w trzech odbiciach. Blokuj przy siatce; ruch do tyłu zmiękcza blok, do siatki kieruje go w dół. Blok nie liczy się jako odbicie. Aut oznacza punkt dla rywala ostatniego odbijającego. Przytrzymaj odbicie, by naładować; ↓ / S celuje niżej. Do 11, przewaga dwóch; przy 16–16 decyduje kolejny punkt. Wygraj trzy sety.',
   },
   choices: (_, l) => [
     {
@@ -97,13 +100,14 @@ const definition: ArcadeDefinition<State> = {
     }
   },
   status(s, l) {
-    return `${COURTS[s.court][l]} · ${l === 'pl' ? 'SETY' : 'SETS'} ${s.wins[0]} : ${s.wins[1]} · ${l === 'pl' ? 'WYMIANA' : 'RALLY'} ${s.rally}`
+    return `${COURTS[s.court][l]} · ${l === 'pl' ? 'SETY' : 'SETS'} ${s.wins[0]} : ${s.wins[1]} · ${l === 'pl' ? 'ODBICIA' : 'TOUCHES'} ${s.touches[0]}/3 : ${s.touches[1]}/3 · ${l === 'pl' ? 'BLOKI' : 'BLOCKS'} ${s.blocks}`
   },
   stats(s, l) {
     return [
       { label: 'P1', value: s.wins[0] },
       { label: 'P2', value: s.wins[1] },
       { label: l === 'pl' ? 'WYMIANA' : 'BEST RALLY', value: s.bestRally },
+      { label: l === 'pl' ? 'BLOKI' : 'BLOCKS', value: s.blocks },
     ]
   },
   endMessage(s, l) {
@@ -177,7 +181,7 @@ const definition: ArcadeDefinition<State> = {
       '#60575d',
       'center',
     )
-    if (s.pointFlash > 0) {
+    if (s.pointFlash > 0 && s.pointCall !== 'touches') {
       ctx.strokeStyle = s.pointCall === 'out' ? '#b35d55' : '#f0d091'
       ctx.lineWidth = 3
       ctx.beginPath()
@@ -222,8 +226,29 @@ const definition: ArcadeDefinition<State> = {
         motion ? s.elapsed : 0,
         Math.abs(p.vx) > 20,
         false,
+        p.block > 0 || p.blockFlash > 0,
       )
       ctx.restore()
+      if (p.block > 0 || p.blockFlash > 0) {
+        const hands = blockHands(p, i),
+          label = l === 'pl' ? 'BLOK' : 'BLOCK'
+        text(
+          ctx,
+          label,
+          hands.x,
+          hands.y - 26,
+          11,
+          p.blockFlash > 0 ? '#fff0ac' : '#d8e8dd',
+          'center',
+        )
+        if (p.block > 0) {
+          ctx.strokeStyle = '#e1edc4'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.arc(hands.x, hands.y, 22, Math.PI, Math.PI * 2)
+          ctx.stroke()
+        }
+      }
       if (p.charge > 0) {
         rect(ctx, p.x - 23, p.y - 18, 46, 4, '#263e4f66')
         rect(ctx, p.x - 23, p.y - 18, 46 * p.charge, 4, '#ffe4a6')
@@ -238,6 +263,47 @@ const definition: ArcadeDefinition<State> = {
         i ? '#a6cbdf' : '#e6ae8b',
       )
     })
+    s.players.forEach((p, index) => {
+      for (let n = 0; n < 3; n++)
+        circle(
+          ctx,
+          p.x - 10 + n * 10,
+          FLOOR + 28,
+          3,
+          n < s.touches[index] ? '#f5dd9c' : '#344f5c44',
+        )
+      text(
+        ctx,
+        p.blockCooldown > 0
+          ? `${p.blockCooldown.toFixed(1)}s`
+          : l === 'pl'
+            ? 'BLOK ✓'
+            : 'BLOCK ✓',
+        p.x,
+        FLOOR + 45,
+        9,
+        p.blockCooldown > 0 ? '#6b6d6a' : '#374f58',
+        'center',
+      )
+    })
+    if (s.blockSpot) {
+      const hit = s.blockSpot,
+        progress = 1 - hit.life / 0.55
+      ctx.strokeStyle = '#fff1b1'
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.arc(hit.x, hit.y, 12 + progress * 30, 0, Math.PI * 2)
+      ctx.stroke()
+      text(
+        ctx,
+        l === 'pl' ? 'ZABLOKOWANE!' : 'BLOCKED!',
+        hit.x,
+        hit.y - 36 - progress * 12,
+        16,
+        '#fff1bb',
+        'center',
+      )
+    }
     shadow(ctx, s.ball.x, FLOOR + 3, 15, 4, '#25475833')
     orb(ctx, s.ball.x, s.ball.y, 15, '#f2db9a')
     ctx.save()
@@ -276,11 +342,17 @@ const definition: ArcadeDefinition<State> = {
         ctx,
         s.pointCall === 'out'
           ? (l === 'pl' ? 'AUT · PUNKT DLA' : 'OUT · POINT TO') + ' ' + winner
-          : (l === 'pl' ? 'PUNKT DLA' : 'POINT TO') + ' ' + winner,
+          : s.pointCall === 'touches'
+            ? (l === 'pl'
+                ? 'CZTERY ODBICIA · PUNKT DLA'
+                : 'FOUR TOUCHES · POINT TO') +
+              ' ' +
+              winner
+            : (l === 'pl' ? 'PUNKT DLA' : 'POINT TO') + ' ' + winner,
         500,
         148,
         19,
-        s.pointCall === 'out' ? '#8f4546' : '#f7e8bd',
+        s.fault >= 0 ? '#8f4546' : '#f7e8bd',
         'center',
       )
     }

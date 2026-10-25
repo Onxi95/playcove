@@ -29,7 +29,7 @@ These are the agreed requirements for Playcove. They apply to future games and c
 
 - Design for worthwhile decisions and changing challenges throughout a skilled 15–30 minute session. Connect short matches into a campaign, tour, cup, series, or endless run.
 - Introduce varied layouts, opponent behavior, environmental effects, expanding mechanics, or earned tactical boosts. Repeating the opening faster or increasing health alone is insufficient.
-- Make movement, aim, trajectory, collisions, and scoring understandable and controllable. Visible boundaries must match the rules. For example, Volley Clash awards the opponent a point when the last hitter sends the ball out of court.
+- Make movement, aim, trajectory, collisions, and scoring understandable and controllable. Visible boundaries must match the rules. For example, Volley Clash distinguishes receives, attacks, and timed blocks, enforces three normal touches, and awards the opponent a point when the last hitter sends the ball out of court.
 - Keep Start, Continue, New run, and retry actions prominent, readable, and large enough for touch. Show a new-run action beside Continue or Resume rather than hiding it among mode settings. Give secondary actions an explicit contrasting surface.
 - Show why a point or run was lost. Make retrying one action by touch or keyboard, without a reload or repeated setup. A held key must not accidentally restart a game.
 - Save records automatically and preserve ongoing progression locally. Resume from a meaningful checkpoint and explain any round restart behavior.

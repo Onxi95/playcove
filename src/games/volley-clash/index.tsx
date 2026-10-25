@@ -5,26 +5,26 @@ export const manifest = {
     slug: 'volley-clash',
     name: 'Volley Clash',
     description:
-      'Charge spikes, dive for saves, and play a five-set volleyball match across beaches, rooftops, and low-gravity gardens.',
+      'Receive, set, spike, and time a block at the net. Play solo or local volleyball across changing courts and a first-to-three-set match.',
     genreSlug: 'sports',
     players: '1–2 players',
     playTime: '15–30+ min',
     accent: 'coral',
     controls:
-      'P1: A D, W jump, Space hit, Q dash. P2: arrows, Enter hit, Shift dash.',
+      'P1: A D, W jump, Space hit, E block, Q dash. P2: arrows, Enter hit, L block, Shift dash.',
     localMultiplayer: true,
   },
   pl: {
     slug: 'volley-clash',
     name: 'Volley Clash',
     description:
-      'Ładuj ataki, ratuj piłkę i graj w siatkówkę na plaży, dachach i w księżycowym ogrodzie.',
+      'Przyjmuj, wystawiaj, atakuj i blokuj przy siatce. Graj solo lub we dwoje na zmieniających się boiskach, do trzech wygranych setów.',
     genreSlug: 'sports',
     players: '1–2 graczy',
     playTime: '15–30+ min',
     accent: 'coral',
     controls:
-      'P1: A D, W skok, spacja: odbicie, Q unik. P2: strzałki, Enter: odbicie, Shift unik.',
+      'P1: A D, W skok, spacja: atak, E blok, Q unik. P2: strzałki, Enter: atak, L blok, Shift unik.',
     localMultiplayer: true,
   },
 } satisfies Record<'en' | 'pl', GameManifest>
