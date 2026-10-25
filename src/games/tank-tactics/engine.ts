@@ -88,7 +88,7 @@ export function create(p?: Progress): State {
     ),
     landscape,
     wins: [numberCarry(p, 'w1', 0, 0, 7), numberCarry(p, 'w2', 0, 0, 7)],
-    lastWinner: -1,
+    lastWinner: numberCarry(p, 'lastWinner', -1, -1, 1),
     explosions: [],
     shots: numberCarry(p, 'shots', 0),
     mode: opponentMode(p?.carry.mode),
@@ -327,6 +327,7 @@ export function save(s: State): Progress {
     w1: s.wins[0],
     w2: s.wins[1],
     shots: s.shots,
+    lastWinner: s.lastWinner,
   }
   s.tanks.forEach((t, i) => {
     for (const key of ['angle', 'power', 'hp', 'weapon', 'heavy', 'skipper']) {

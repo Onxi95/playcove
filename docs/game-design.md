@@ -2,6 +2,8 @@
 
 Games should be compelling enough that players want another round. Build that pull from good play: responsive controls, clear feedback, skill to master, fair challenge, and quick retries. “Addictive” means satisfying and replayable, not pressuring players to stay.
 
+The [product requirements](requirements.md) define portal architecture, play modes, localization, presentation, advertising, and storage boundaries. This document defines gameplay standards and game-specific rules.
+
 ## Long sessions and expansion
 
 Design each game to sustain 15–30 minutes of active play for a skilled player. Short rounds are building blocks: connect them into an endless run, campaign, cup, or local match series with a visible next objective. A three-goal football match alone does not meet this requirement.
@@ -69,3 +71,19 @@ Before adding a game, check:
 ## Visual clarity
 
 Give each game recognizable scenery and detailed silhouettes appropriate to its viewpoint. Use depth, material highlights, contact shadows, animation, and restrained effects to explain movement and impacts. Keep hazards and collision boundaries legible. Background detail must remain quieter than active objects; do not draw decorative barriers that imply nonexistent collisions. Keep important effects readable with reduced motion enabled. Avoid stretching a low-resolution canvas or loading remote assets during play.
+
+## Local multiplayer expansion
+
+- **Volley Clash** supports solo opponents or two players. Movement, jumps, charged hits, low attacks, and stamina dashes control rallies. Win three sets across beach, crosswind, low-gravity, and tidal courts. Sets target eleven with a two-point lead; at 16–16 the next point decides the set so one balanced rally series cannot stall the changing-court progression. Mark court boundaries and out zones. A ball landing outside the court gives the opponent of the last hitter one point; a ball touching a boundary line counts in. A ball fully leaving the visible side is also out, without bouncing off an invisible wall. Crossing a sideline in flight alone does not end a rally while the ball can still return. Show an out call and who received the point. Computer opponents should recognize likely out balls and control hit power. Save points and sets, resuming at service.
+- **Tank Tactics** supports computer opponents and pass-and-play. Angle, power, changing wind, destructible hills, limited heavy shells, and bouncing skipper shells create tactical turns without a timer. A seven-win expedition changes terrain and gravity between battles. Preserve terrain and an in-flight shell when saving.
+- **Ricochet Rivals** supports solo opponents or local duels. Lock aim while charging, release to throw, use cover for bank shots, and time a parry to return danger. Own ricochets remain dangerous. Contested cores restore one shield and energy. Nine battle wins complete a tournament; four arena layouts and a gradually contracting boundary prevent static standoffs.
+- **Circuit Clash** supports solo opponents or local races. Five laps and ordered timing gates prevent shortcut wins. Drift and slipstream recharge nitro; car contact, grass penalties, pickup lines, and five authored circuits add choices. Win seven races to complete a tour. Race checkpoints restart the current race while preserving tour wins.
+- **Twin Tethers** is cooperative. Each player collects their own stars and activates matching latched pads; both must reach the exit. Buffered variable-height jumps, drop-through platforms, rope tension, and an earned tether-hop enable rescues. Later rooms add a telegraphed laser cycle, moving lifts, extra stars, and gusts. Save collected objectives and shared checkpoints.
+
+Computer opponents use the same movement, health, ammunition, and physics as human players. Difficulty changes reaction time, aim precision, and decisions. Keep local play available and identify computer players on the field.
+
+## Phones and touch
+
+Every game must expose enough touch controls to complete normal play, including hold/release actions and tactical abilities. Provide separate pads for local/cooperative players and one pad against a computer. Turn-based games may share a pass-and-play pad. Keep controls outside the play field; support portrait layouts and fullscreen landscape. Do not require a keyboard-only action to resume, attack, jump, aim, change equipment, or use a boost.
+
+Use captured pointer events so dragging a thumb off a button does not lose release events. Keep independent movement/action touches and multiple pointers on one button distinct. Release an action once; cancellation pauses safely and clears held inputs. Avoid page scrolling, text selection, and long-press menus while using the controls. Keep targets at least 44 pixels where phone space permits, wrap larger action sets, and respect safe-area insets. Reuse game-owned inputs rather than introducing separate touch-only physics. Verify controls at phone width and high DPI, simultaneous touches, cancellation, local play, and charge/release.

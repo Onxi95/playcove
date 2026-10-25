@@ -5,7 +5,17 @@ import { createArcadeGame } from '../kit/ArcadeHost.tsx'
 import { circle, rect, text } from '../kit/arcade.ts'
 import { bevel, orb, polygon, shadow, worker } from '../kit/art.ts'
 import type { ArcadeDefinition } from '../kit/arcade.ts'
-import { create, update, choose, save, COURTS, FLOOR, NET } from './engine.ts'
+import {
+  create,
+  update,
+  choose,
+  save,
+  COURTS,
+  FLOOR,
+  NET,
+  COURT_LEFT,
+  COURT_RIGHT,
+} from './engine.ts'
 import type { State } from './engine.ts'
 const definition: ArcadeDefinition<State> = {
   id: 'volley-clash',
@@ -51,8 +61,8 @@ const definition: ArcadeDefinition<State> = {
     pl: 'Dwie strony. Jeszcze jedna obrona.',
   },
   help: {
-    en: 'P1: A D move, W jump, Space power hit, Q dash. Local P2: ← → move, ↑ jump, Enter power hit, Shift dash. Hold a hit to charge; ↓ / S aims lower. First to 11, win by two; sudden point at 16–16. Win three sets across changing courts.',
-    pl: 'P1: A D ruch, W skok, spacja: mocne odbicie, Q unik. P2 lokalnie: ← → ruch, ↑ skok, Enter: mocne odbicie, Shift unik. Przytrzymaj odbicie, by naładować; ↓ / S celuje niżej. Do 11, przewaga dwóch; przy 16–16 decyduje kolejny punkt. Wygraj trzy sety.',
+    en: 'P1: A D move, W jump, Space power hit, Q dash. Local P2: ← → move, ↑ jump, Enter power hit, Shift dash. Shots landing outside the court lose a point for the last hitter. Hold a hit to charge; ↓ / S aims lower. First to 11, win by two; sudden point at 16–16. Win three sets across changing courts.',
+    pl: 'P1: A D ruch, W skok, spacja: mocne odbicie, Q unik. P2 lokalnie: ← → ruch, ↑ skok, Enter: mocne odbicie, Shift unik. Aut oznacza punkt dla rywala ostatniego odbijającego. Przytrzymaj odbicie, by naładować; ↓ / S celuje niżej. Do 11, przewaga dwóch; przy 16–16 decyduje kolejny punkt. Wygraj trzy sety.',
   },
   choices: (_, l) => [
     {
@@ -143,11 +153,50 @@ const definition: ArcadeDefinition<State> = {
         1,
         '#fff2c344',
       )
+    rect(ctx, 0, FLOOR, COURT_LEFT, 85, '#685e6944')
+    rect(ctx, COURT_RIGHT, FLOOR, 1000 - COURT_RIGHT, 85, '#685e6944')
+    for (const x of [COURT_LEFT, COURT_RIGHT]) {
+      rect(ctx, x - 2, FLOOR - 2, 4, 47, '#fff0c9')
+      rect(ctx, x - 8, FLOOR - 2, 16, 4, '#fff0c9')
+    }
+    text(
+      ctx,
+      l === 'pl' ? 'AUT' : 'OUT',
+      COURT_LEFT / 2,
+      FLOOR + 53,
+      11,
+      '#60575d',
+      'center',
+    )
+    text(
+      ctx,
+      l === 'pl' ? 'AUT' : 'OUT',
+      (COURT_RIGHT + 1000) / 2,
+      FLOOR + 53,
+      11,
+      '#60575d',
+      'center',
+    )
+    if (s.pointFlash > 0) {
+      ctx.strokeStyle = s.pointCall === 'out' ? '#b35d55' : '#f0d091'
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.ellipse(
+        Math.max(17, Math.min(983, s.landing)),
+        FLOOR + 5,
+        15,
+        5,
+        0,
+        0,
+        Math.PI * 2,
+      )
+      ctx.stroke()
+    }
     ctx.strokeStyle = '#fff4d7'
     ctx.lineWidth = 3
     ctx.beginPath()
-    ctx.moveTo(30, FLOOR + 4)
-    ctx.lineTo(970, FLOOR + 4)
+    ctx.moveTo(COURT_LEFT, FLOOR + 4)
+    ctx.lineTo(COURT_RIGHT, FLOOR + 4)
     ctx.stroke()
     bevel(ctx, 494, NET, 12, FLOOR - NET, '#9fbebc', 3)
     rect(ctx, 484, NET, 32, 5, '#f0e7c8', 2)
@@ -193,7 +242,7 @@ const definition: ArcadeDefinition<State> = {
     orb(ctx, s.ball.x, s.ball.y, 15, '#f2db9a')
     ctx.save()
     ctx.translate(s.ball.x, s.ball.y)
-    ctx.rotate(s.elapsed * 3)
+    ctx.rotate(motion ? s.elapsed * 3 : 0)
     ctx.strokeStyle = '#d78c72'
     ctx.lineWidth = 2
     ctx.beginPath()
@@ -221,7 +270,21 @@ const definition: ArcadeDefinition<State> = {
     )
     text(ctx, 'P1', 35, 39, 16, '#753e42')
     text(ctx, opponentLabel(s.mode, l), 965, 39, 16, '#314f76', 'right')
-    if (s.serve > 0)
+    if (s.pointFlash > 0) {
+      const winner = s.lastWinner === 0 ? 'P1' : opponentLabel(s.mode, l)
+      text(
+        ctx,
+        s.pointCall === 'out'
+          ? (l === 'pl' ? 'AUT · PUNKT DLA' : 'OUT · POINT TO') + ' ' + winner
+          : (l === 'pl' ? 'PUNKT DLA' : 'POINT TO') + ' ' + winner,
+        500,
+        148,
+        19,
+        s.pointCall === 'out' ? '#8f4546' : '#f7e8bd',
+        'center',
+      )
+    }
+    if (s.serve > 0 && s.pointFlash === 0)
       text(
         ctx,
         `${l === 'pl' ? 'SERWIS' : 'SERVE'} P${s.server + 1} · ${Math.ceil(s.serve)}`,

@@ -390,3 +390,155 @@ test('Solo opponents actually serve, aim, shoot, and complete races under the sa
       finite(s)
     }
 })
+
+test('Every co-op room can be traversed, its colored objectives collected, and its exit reached through real jumps', () => {
+  for (let room = 0; room < twins.ROOMS.length; room++) {
+    const s = twins.create(progress(1, { room })),
+      steps = [0, 0],
+      air = [false, false]
+    for (let frame = 0; frame < 7200 && s.phase === 'play'; frame++) {
+      const held = [],
+        tapped = []
+      s.players.forEach((p, index) => {
+        const step = steps[index],
+          target = s.platforms[step],
+          jump = index ? 'arrowup' : 'w'
+        let x = 950
+        if (target) {
+          const previous = step
+            ? s.platforms[step - 1]
+            : { x: 0, y: 540, w: 350 }
+          x = air[index]
+            ? target.x + target.w * 0.55
+            : Math.min(previous.x + previous.w - 22, target.x - 10)
+          if (p.ground && !air[index] && Math.abs(p.x - x) < 9) {
+            air[index] = true
+            held.push(jump)
+            tapped.push(jump)
+          } else if (air[index] && !p.ground) held.push(jump)
+          if (
+            air[index] &&
+            p.ground &&
+            Math.abs(p.y + 34 - target.y) < 3 &&
+            p.x > target.x + 10 &&
+            p.x < target.x + target.w - 10
+          ) {
+            const inPlatform = (o) =>
+              o.owner === index && o.x >= target.x && o.x <= target.x + target.w
+            const objective = [
+              ...s.stars.filter(
+                (o) =>
+                  !o.taken &&
+                  inPlatform(o) &&
+                  Math.abs(o.y + 22 - target.y) < 1,
+              ),
+              ...s.pads.filter(
+                (o) =>
+                  !o.active && inPlatform(o) && Math.abs(o.y - target.y) < 1,
+              ),
+            ][0]
+            if (objective) x = objective.x
+            else {
+              steps[index]++
+              air[index] = false
+            }
+          }
+        } else if (p.x > 925 && p.y < 475) held.push(index ? 'arrowdown' : 's')
+        if (p.x < x - 4) held.push(index ? 'arrowright' : 'd')
+        if (p.x > x + 4) held.push(index ? 'arrowleft' : 'a')
+      })
+      twins.update(s, input(held, tapped), 1 / 60)
+    }
+    assert.equal(s.phase, 'choice', `Room ${room} is traversable`)
+    assert.ok(s.stars.every((o) => o.taken))
+    assert.ok(s.pads.every((o) => o.active))
+    assert.ok(s.players.every((p) => p.x > 922))
+    assert.equal(s.deaths, 0)
+  }
+})
+
+test('Volleyball out-of-court shots penalize the last hitter, including deflections and both sidelines', () => {
+  for (const [last, x, winner] of [
+    [0, 940, 1],
+    [1, 60, 0],
+    [0, 60, 1],
+    [1, 940, 0],
+  ]) {
+    const s = volley.create()
+    s.serve = 0
+    s.ball = {
+      x,
+      y: volley.FLOOR - volley.BALL_RADIUS,
+      vx: 0,
+      vy: 100,
+      spin: 0,
+      last,
+      contact: 0,
+    }
+    volley.update(s, input(), 0)
+    assert.equal(s.points[winner], 1)
+    assert.equal(s.points[1 - winner], 0)
+    assert.equal(s.pointCall, 'out')
+    assert.equal(s.fault, last)
+    assert.equal(s.server, winner)
+    volley.update(s, input(), 0.05)
+    assert.equal(s.points[winner], 1, 'An out ball only awards one point')
+  }
+  const s = volley.create()
+  s.serve = 0
+  const p = s.players[1]
+  s.ball = {
+    x: p.x - 10,
+    y: p.y - 20,
+    vx: 100,
+    vy: 100,
+    spin: 0,
+    last: 0,
+    contact: 0,
+  }
+  volley.update(s, input(['enter']), 0.01)
+  assert.equal(s.ball.last, 1)
+  s.ball.x = volley.COURT_LEFT - volley.BALL_RADIUS - 1
+  s.ball.y = volley.FLOOR - volley.BALL_RADIUS
+  s.ball.vx = 0
+  volley.update(s, input(), 0)
+  assert.equal(s.points[0], 1)
+  assert.equal(s.fault, 1)
+})
+
+test('Volleyball boundary contact is in, airborne sidelines stay live, and shots cannot rebound from screen edges', () => {
+  for (const [x, last, winner, call] of [
+    [volley.COURT_LEFT - volley.BALL_RADIUS, 1, 1, 'in'],
+    [volley.COURT_LEFT - volley.BALL_RADIUS - 0.01, 1, 0, 'out'],
+    [volley.COURT_RIGHT + volley.BALL_RADIUS, 0, 0, 'in'],
+    [volley.COURT_RIGHT + volley.BALL_RADIUS + 0.01, 0, 1, 'out'],
+    [700, 0, 0, 'in'],
+    [300, 1, 1, 'in'],
+  ]) {
+    const s = volley.create()
+    s.serve = 0
+    s.ball = {
+      x,
+      y: volley.FLOOR - volley.BALL_RADIUS,
+      vx: 0,
+      vy: 100,
+      spin: 0,
+      last,
+      contact: 0,
+    }
+    volley.update(s, input(), 0)
+    assert.equal(s.pointCall, call)
+    assert.equal(s.points[winner], 1)
+  }
+  const s = volley.create()
+  s.serve = 0
+  s.ball = { x: 950, y: 250, vx: -100, vy: 50, spin: 0, last: 0, contact: 0 }
+  volley.update(s, input(), 0.01)
+  assert.deepEqual(s.points, [0, 0])
+  assert.ok(s.ball.vx < 0)
+  s.ball.x = volley.WIDTH + volley.BALL_RADIUS + 1
+  s.ball.vx = 200
+  volley.update(s, input(), 0.01)
+  assert.equal(s.pointCall, 'out')
+  assert.equal(s.points[1], 1)
+})

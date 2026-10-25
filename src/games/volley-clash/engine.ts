@@ -5,7 +5,10 @@ import type { ArcadeInput, ArcadeState, Progress } from '../kit/arcade.ts'
 export const WIDTH = 1000,
   HEIGHT = 620,
   FLOOR = 535,
-  NET = 355
+  NET = 355,
+  BALL_RADIUS = 15,
+  COURT_LEFT = 90,
+  COURT_RIGHT = 910
 export const COURTS = [
   { en: 'SUNSET BEACH', pl: 'PLAŻA O ZACHODZIE', wind: 0, gravity: 920 },
   { en: 'ROOFTOP CROSSWIND', pl: 'WIATR NA DACHU', wind: 100, gravity: 920 },
@@ -44,6 +47,9 @@ export type State = ArcadeState & {
   bestRally: number
   lastWinner: number
   pointFlash: number
+  pointCall: 'in' | 'out' | ''
+  landing: number
+  fault: number
   mode: OpponentMode
   bot: { timer: number; target: number; jump: number }
   reason: string
@@ -77,8 +83,11 @@ export function create(p?: Progress): State {
     court: numberCarry(p, 'court', 0, 0, 3),
     rally: 0,
     bestRally: numberCarry(p, 'bestRally', 0),
-    lastWinner: -1,
+    lastWinner: numberCarry(p, 'lastWinner', -1, -1, 1),
     pointFlash: 0,
+    pointCall: '',
+    landing: 500,
+    fault: -1,
     mode: opponentMode(p?.carry.mode),
     bot: { timer: 0, target: 770, jump: 0 },
     reason: '',
@@ -86,12 +95,20 @@ export function create(p?: Progress): State {
   s.ball.x = s.server ? 770 : 230
   return s
 }
-export function award(s: State, winner: number) {
+export function award(
+  s: State,
+  winner: number,
+  call: 'in' | 'out' = 'in',
+  landing = s.ball.x,
+) {
+  s.pointCall = call
+  s.landing = clamp(landing, 0, WIDTH)
+  s.fault = call === 'out' ? s.ball.last : -1
   s.points[winner]++
   s.score += 100 + Math.min(1000, s.rally * 20)
   s.lastWinner = winner
   s.server = winner
-  s.pointFlash = 1
+  s.pointFlash = 1.6
   s.events.push('point')
   s.bestRally = Math.max(s.bestRally, s.rally)
   s.rally = 0
@@ -199,9 +216,9 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
   b.vy += court.gravity * dt
   b.x += b.vx * dt
   b.y += b.vy * dt
-  if (b.x < 15 || b.x > WIDTH - 15) {
-    b.x = clamp(b.x, 15, WIDTH - 15)
-    b.vx *= -0.8
+  if (b.x + BALL_RADIUS < 0 || b.x - BALL_RADIUS > WIDTH) {
+    award(s, 1 - b.last, 'out', b.x)
+    return
   }
   if (b.y < 20) {
     b.y = 20
@@ -216,6 +233,12 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
       b.x = previousX < 500 ? 477 : 523
       b.vx = Math.sign(b.x - 500) * Math.max(80, Math.abs(b.vx) * 0.7)
     }
+  }
+  if (b.y >= FLOOR - BALL_RADIUS) {
+    const out =
+      b.x + BALL_RADIUS < COURT_LEFT || b.x - BALL_RADIUS > COURT_RIGHT
+    award(s, out ? 1 - b.last : b.x < 500 ? 1 : 0, out ? 'out' : 'in', b.x)
+    return
   }
   for (let index = 0; index < 2; index++) {
     const p = s.players[index],
@@ -252,7 +275,6 @@ function tick(s: State, input: ArcadeInput, dt: number, first: boolean) {
   }
   b.vx = clamp(b.vx, -600, 600)
   b.vy = clamp(b.vy, -750, 900)
-  if (b.y >= FLOOR - 15) award(s, b.x < 500 ? 1 : 0)
 }
 export function choose(s: State, id: string) {
   if (s.phase !== 'choice') return
@@ -288,6 +310,7 @@ export function save(s: State): Progress {
       w2: s.wins[1],
       court: s.court,
       server: s.server,
+      lastWinner: s.lastWinner,
       bestRally: s.bestRally,
       mode: s.mode,
     },
@@ -320,18 +343,49 @@ function computerInput(
       b.x +
       b.vx * time +
       COURTS[s.court].wind * Math.sin(s.elapsed * 0.6) * time * time * 0.5
-    while (x < 15 || x > 985) x = x < 15 ? 30 - x : 1970 - x
     s.bot.target = incoming
       ? clamp(x + Math.sin(s.elapsed * 1.7) * [22, 9, 2][level], 545, 955)
       : 755
   }
+  const gravity = COURTS[s.court].gravity,
+    flight = Math.max(
+      0,
+      (-b.vy +
+        Math.sqrt(
+          Math.max(0, b.vy * b.vy + 2 * gravity * (FLOOR - BALL_RADIUS - b.y)),
+        )) /
+        gravity,
+    )
+  const landing =
+    b.x +
+    b.vx * flight +
+    COURTS[s.court].wind * Math.sin(s.elapsed * 0.6) * flight * flight * 0.5
+  const leaveOut =
+    b.last === 0 &&
+    (landing + BALL_RADIUS < COURT_LEFT || landing - BALL_RADIUS > COURT_RIGHT)
+  if (leaveOut) s.bot.target = 700
   const held: string[] = [],
     tapped: string[] = []
   if (p.x < s.bot.target - 10) held.push('arrowright')
   if (p.x > s.bot.target + 10) held.push('arrowleft')
-  if (incoming && Math.abs(b.x - p.x) < 330) held.push('enter')
+  const hitFlight =
+    (590 +
+      Math.sqrt(
+        590 * 590 + 2 * gravity * Math.max(0, FLOOR - BALL_RADIUS - (p.y - 20)),
+      )) /
+    gravity
+  const charge = clamp(((p.x - 250) / hitFlight - 285) / 150, 0, 1)
   if (
     incoming &&
+    !leaveOut &&
+    Math.abs(b.x - p.x) < 330 &&
+    p.charge < Math.max(0.05, charge) &&
+    p.hit === 0
+  )
+    held.push('enter')
+  if (
+    incoming &&
+    !leaveOut &&
     p.ground &&
     s.bot.jump === 0 &&
     Math.abs(b.x - p.x) < [45, 70, 85][level] &&
@@ -345,6 +399,7 @@ function computerInput(
   if (s.bot.jump > 0) held.push('arrowup')
   if (
     level > 0 &&
+    !leaveOut &&
     p.energy > 80 &&
     Math.abs(p.x - s.bot.target) > 150 &&
     b.y > 300 &&

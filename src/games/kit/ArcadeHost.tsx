@@ -128,6 +128,7 @@ export function createArcadeGame<S extends ArcadeState>(
       sceneRef.current = definition.create()
       definition.configure?.(sceneRef.current, mode)
       inputRef.current = emptyInput(mode)
+      persist()
       setSaved(false)
       setResume(false)
       setRunBest(records[0]?.score ?? 0)
@@ -536,6 +537,14 @@ export function createArcadeGame<S extends ArcadeState>(
                 status === 'paused' ? () => setStatus('playing') : start
               }
               onRestart={fresh}
+              showRestart={resume}
+              restartLabel={
+                resume
+                  ? pl
+                    ? 'Zacznij nowy bieg'
+                    : 'Start a new run'
+                  : undefined
+              }
               result={{
                 value: scene.score,
                 label: pl ? 'PUNKTY' : 'POINTS',
@@ -551,7 +560,7 @@ export function createArcadeGame<S extends ArcadeState>(
                 ],
               }}
               settings={
-                status === 'ready' && (definition.modes || resume) ? (
+                status === 'ready' && definition.modes ? (
                   <div className="arcade-menu-settings">
                     {definition.modes?.map((item) => (
                       <button
@@ -567,20 +576,6 @@ export function createArcadeGame<S extends ArcadeState>(
                         <span>{item.detail[locale]}</span>
                       </button>
                     ))}
-                    {resume && (
-                      <button
-                        onClick={() => {
-                          try {
-                            localStorage.removeItem(`${prefix}.checkpoint.v1`)
-                          } catch {}
-                          sceneRef.current = definition.create()
-                          setResume(false)
-                          setView((v) => v + 1)
-                        }}
-                      >
-                        {pl ? 'Zacznij nowy bieg' : 'Start a new run'}
-                      </button>
-                    )}
                     <p>
                       {pl
                         ? 'Postęp zapisuje się lokalnie.'

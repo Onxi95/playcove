@@ -7,3 +7,5 @@ import './arcade-expansion.test.mjs'
 import './multiplayer-games.test.mjs'
 
 import './touch-games.test.mjs'
+
+import './menu-actions.test.mjs'
