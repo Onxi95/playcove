@@ -1,6 +1,7 @@
 # Project rules
 
 - Never commit changes without an explicit request.
+- Follow Conventional Commits: `<type>(<optional scope>): <description>` (for example, `fix(volley-clash): avoid unreachable blocks`).
 - Run tests appropriate to the change before reporting completion.
 - Keep comments for reasoning that code cannot express. Avoid type casts unless alternatives fail.
 - Keep games independently embeddable, entirely playable on the client, and compatible with the portal's static build.
