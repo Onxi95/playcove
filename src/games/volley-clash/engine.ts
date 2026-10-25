@@ -457,6 +457,9 @@ function computerInput(
   const leaveOut =
     b.last === 0 &&
     (landing + BALL_RADIUS < COURT_LEFT || landing - BALL_RADIUS > COURT_RIGHT)
+  const crossing = (500 - b.x) / Math.max(1, b.vx),
+    crossingHeight = b.y + b.vy * crossing + gravity * crossing * crossing * 0.5,
+    highestBlock = FLOOR - 60 - (555 * 555) / (2 * 1250) - 17
   const netPlay =
     level > 0 &&
     !leaveOut &&
@@ -464,7 +467,8 @@ function computerInput(
     b.vx > 130 &&
     b.x > 280 &&
     b.x < 570 &&
-    b.y < 410
+    b.y < 410 &&
+    crossingHeight >= highestBlock - BALL_RADIUS - 19
   if (netPlay) s.bot.target = 548
   if (leaveOut) s.bot.target = 700
   const held: string[] = [],
@@ -499,7 +503,6 @@ function computerInput(
     s.bot.jump = 0.32
     tapped.push('arrowup')
   }
-  const crossing = (500 - b.x) / Math.max(1, b.vx)
   if (
     netPlay &&
     Math.abs(p.x - 500) < 80 &&

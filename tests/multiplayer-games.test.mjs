@@ -354,10 +354,13 @@ test('Multiplayer tournaments retain results across stage choices and saved comp
 test('Solo opponents actually serve, aim, shoot, and complete races under the same physics', () => {
   const solo = (mode = 'solo') => ({ ...input(), mode })
   const v = volley.create()
-  for (let n = 0; n < 1800 && v.phase === 'play'; n++)
+  let volleyOpponentMoved = false
+  for (let n = 0; n < 1800 && v.phase === 'play'; n++) {
     volley.update(v, solo(), 1 / 60)
+    volleyOpponentMoved ||= v.players[1].x !== 770
+  }
   assert.equal(v.mode, 'solo')
-  assert.ok(v.players[1].x !== 770)
+  assert.ok(volleyOpponentMoved)
   assert.ok(v.points[1] > 0 || v.wins[1] > 0)
   const t = tank.create()
   t.turn = 1
